@@ -6,7 +6,7 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
 
 ```
                        +-----------------------+
-                       |    Cloudflare Tunnel   |
+                       |    Cloudflare Tunnel  |
                        |   git.example.com     |
                        +----------+------------+
                                   |
@@ -25,7 +25,7 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
             ^                               +---------------------+
             |                                           ^
             |          +-------------------+            |
-            +----------+  Watchdog (local)  +----------+
+            +----------+  Watchdog (local) +------------+
                        |                   |
                        |  uptime-kuma      |
                        |  failover agent   |
