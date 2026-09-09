@@ -52,6 +52,16 @@ services:
       FORGEJO__database__NAME: ${POSTGRES_DB}
       FORGEJO__database__USER: ${POSTGRES_USER}
       FORGEJO__database__PASSWD: ${POSTGRES_PASSWORD}
+      FORGEJO__mailer__ENABLED: "true"
+      FORGEJO__mailer__PROTOCOL: smtps
+      FORGEJO__mailer__SMTP_ADDR: smtp.mx.cloudflare.net
+      FORGEJO__mailer__SMTP_PORT: "465"
+      FORGEJO__mailer__FROM: ${MAIL_FROM}
+      FORGEJO__mailer__USER: api_token
+      FORGEJO__mailer__PASSWD: ${CF_API_TOKEN}
+      FORGEJO__service__DISABLE_REGISTRATION: ${FORGEJO_DISABLE_REGISTRATION:-true}
+      FORGEJO__service__REQUIRE_SIGNIN_VIEW: ${FORGEJO_REQUIRE_SIGNIN_VIEW:-true}
+      FORGEJO__repository__DEFAULT_PRIVATE: ${FORGEJO_DEFAULT_PRIVATE:-private}
     volumes:
       - forgejo_data:/data
       - /etc/timezone:/etc/timezone:ro

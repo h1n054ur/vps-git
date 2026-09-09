@@ -146,39 +146,40 @@
     --password "{{ forgejo_admin_password }}"
     --email "{{ forgejo_admin_email }}"
   register: admin_create
-  failed_when: admin_create.rc != 0 and 'already exists' not in admin_create.stdout
+  failed_when: admin_create.rc != 0 and 'already exists' not in (admin_create.stdout + admin_create.stderr)
   changed_when: admin_create.rc == 0
   when: node_role == "primary"
 
-- name: Harden Forgejo security settings
-  shell: |
-    docker exec vps-git-forgejo sh -c '
-      ini=/data/gitea/conf/app.ini
-
-      # Disable public registration
-      sed -i "s/DISABLE_REGISTRATION.*/DISABLE_REGISTRATION = {{ forgejo_disable_registration | default(true) | string | lower }}/" "$ini"
-
-      # Require sign-in to view anything
-      sed -i "s/REQUIRE_SIGNIN_VIEW.*/REQUIRE_SIGNIN_VIEW = {{ forgejo_require_signin | default(true) | string | lower }}/" "$ini"
-
-      # Default visibility for new repos
-      grep -q "DEFAULT_PRIVATE" "$ini" || sed -i "/\[repository\]/a DEFAULT_PRIVATE = {{ forgejo_default_private | default(\"private\") }}" "$ini"
-    '
-  register: harden
-  changed_when: true
+- name: List existing auth sources
+  shell: docker exec --user git vps-git-forgejo forgejo admin auth list
+  register: auth_list
+  changed_when: false
   when: node_role == "primary"
 
-- name: Restart Forgejo after hardening
-  shell: docker restart vps-git-forgejo
-  when: node_role == "primary" and harden.changed
+- name: Register GitHub OAuth provider
+  shell: >
+    docker exec --user git vps-git-forgejo
+    forgejo admin auth add-oauth
+    --name github
+    --provider github
+    --key "{{ github_oauth_client_id }}"
+    --secret "{{ github_oauth_client_secret }}"
+    --scopes user:email --scopes read:user
+    --skip-local-2fa
+  register: oauth_create
+  when: node_role == "primary" and 'github' not in auth_list.stdout
 
-- name: Wait for Forgejo after hardening
+- name: Restart Forgejo after OAuth
+  shell: docker restart vps-git-forgejo
+  when: node_role == "primary" and oauth_create is changed
+
+- name: Wait for Forgejo after OAuth
   uri:
     url: "http://127.0.0.1:3000/api/healthz"
     method: GET
     status_code: 200
-  register: health3
+  register: health5
   retries: 30
   delay: 5
-  until: health3.status == 200
-  when: node_role == "primary" and harden.changed
+  until: health5.status == 200
+  when: node_role == "primary" and oauth_create is changed

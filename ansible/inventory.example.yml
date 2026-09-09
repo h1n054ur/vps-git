@@ -44,6 +44,21 @@ all:
     tunnel_name: vps-git
     tunnel_credentials_file: ""  # e.g. your-tunnel-uuid.json
 
+    # Cloudflare email sending (SMTP)
+    # Get API token from: Cloudflare Dashboard > My Profile > API Tokens
+    # Token needs "Email Sending: Edit" permission
+    # Domain must be onboarded for Email Sending in Cloudflare Dashboard > Email Service
+    # NOTE: subdomains must be onboarded separately (Onboard Domain > subdomain)
+    mail_from: "noreply@example.com"
+    cf_api_token: "CHANGEME"
+
+    # GitHub OAuth login
+    # Create at: https://github.com/settings/developers > OAuth Apps > New OAuth App
+    # Homepage URL: your Forgejo URL
+    # Callback URL: your Forgejo URL + /user/oauth2/github/callback
+    github_oauth_client_id: "CHANGEME"
+    github_oauth_client_secret: "CHANGEME"
+
   children:
     primary:
       hosts:
