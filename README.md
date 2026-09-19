@@ -172,7 +172,7 @@ ansible-playbook promote.yml
 Once the old primary is back online:
 
 ```sh
-ansible-playbook demote.yml -l standby -e init_standby_pg=true
+ansible-playbook demote.yml -l primary -e init_standby_pg=true
 ```
 
 This wipes the promoted node's Postgres data, re-syncs from the current primary via `pg_basebackup`, and starts it as a streaming replica.
