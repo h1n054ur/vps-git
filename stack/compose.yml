@@ -100,7 +100,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PGHOST: 127.0.0.1
+      PGHOST: ${PG_BIND:-127.0.0.1}
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB}
