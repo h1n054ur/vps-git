@@ -1,0 +1,37 @@
+{%- assign status_url = "https://status-git.h1n054ur.dev" -%}
+{%- if heartbeatJSON -%}
+  {%- if monitorJSON.type == "port" or monitorJSON.type == "ping" or monitorJSON.type == "dns" -%}
+    {%- capture target -%}{{ monitorJSON.hostname }}{% if monitorJSON.port %}:{{ monitorJSON.port }}{% endif %}{%- endcapture -%}
+  {%- elsif monitorJSON.type == "push" -%}
+    {%- assign target = "push heartbeat" -%}
+  {%- else -%}
+    {%- assign target = monitorJSON.url -%}
+  {%- endif -%}
+  {%- assign ts = heartbeatJSON.time | append: "Z" | date: "%s" -%}
+  {%- if heartbeatJSON.status == 1 -%}
+    {%- assign accent = 2278750 -%}
+    {%- capture text -%}### 🟢 {{ monitorJSON.name }} is up
+**Target** `{{ target }}`
+**Response** {% if heartbeatJSON.ping %}{{ heartbeatJSON.ping }} ms{% else %}n/a{% endif %}
+**Since** <t:{{ ts }}:f> (<t:{{ ts }}:R>){%- endcapture -%}
+  {%- elsif heartbeatJSON.status == 0 -%}
+    {%- assign accent = 8330525 -%}
+    {%- capture text -%}### 🔴 {{ monitorJSON.name }} is down
+**Target** `{{ target }}`
+**Error** {{ heartbeatJSON.msg | default: "n/a" | truncate: 300 }}
+**Since** <t:{{ ts }}:f> (<t:{{ ts }}:R>){%- endcapture -%}
+  {%- else -%}
+    {%- assign accent = 16096779 -%}
+    {%- capture text -%}### 🟡 {{ monitorJSON.name }} is {% if heartbeatJSON.status == 3 %}in maintenance{% else %}pending{% endif %}
+**Target** `{{ target }}`
+**Note** {{ heartbeatJSON.msg | default: "n/a" | truncate: 300 }}
+**Since** <t:{{ ts }}:f> (<t:{{ ts }}:R>){%- endcapture -%}
+  {%- endif -%}
+  {%- capture footer -%}-# Uptime Kuma @ bts-khi01 · {{ monitorJSON.type }} monitor{%- endcapture -%}
+{%- else -%}
+  {%- assign accent = 9741240 -%}
+  {%- capture text -%}### 🔔 Uptime Kuma test
+{{ msg }}{%- endcapture -%}
+  {%- capture footer -%}-# Uptime Kuma @ bts-khi01 · test notification{%- endcapture -%}
+{%- endif -%}
+{"username": "Uptime Kuma", "avatar_url": "https://raw.githubusercontent.com/louislam/uptime-kuma/master/public/icon.png", "flags": 32768, "allowed_mentions": {"parse": []}, "components": [{"type": 17, "accent_color": {{ accent }}, "components": [{"type": 10, "content": {{ text | json }}}, {"type": 10, "content": {{ footer | json }}}, {"type": 14, "divider": true, "spacing": 1}, {"type": 1, "components": [{"type": 2, "style": 5, "label": "Status page", "url": "{{ status_url }}"}{% if heartbeatJSON and target contains "https://" %}, {"type": 2, "style": 5, "label": "Open target", "url": {{ target | json }}}{% endif %}]}]}]}

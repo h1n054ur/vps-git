@@ -160,6 +160,27 @@
     daemon_reload: "{{ backup_units is changed }}"
   when: offsite_backup_enabled | default(false) | bool
 
+# Live Discord status card. Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in
+# /etc/vps-git-backup/notify.env (create the card once with status-card.sh --create).
+- name: Install status card units
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - vps-git-status.service
+    - vps-git-status.timer
+  register: status_units
+  when: status_card_enabled | default(false) | bool
+
+- name: Enable status card timer
+  systemd:
+    name: vps-git-status.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ status_units is changed }}"
+  when: status_card_enabled | default(false) | bool
+
 - name: Wait for Postgres to be healthy
   shell: docker exec vps-git-postgres pg_isready -U {{ postgres_user }} -d {{ postgres_db }}
   register: pg_ready

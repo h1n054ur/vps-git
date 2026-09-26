@@ -43,6 +43,11 @@ all:
     # serving primary only. Needs /etc/vps-git-backup/r2.env and restic-password
     # on each node, created by hand (see README "Offsite backups").
     offsite_backup_enabled: false
+
+    # Live Discord status card edited every 15 minutes by the serving primary.
+    # Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in /etc/vps-git-backup/notify.env
+    # (see README "Notifications"; create the card once with stack/status-card.sh --create).
+    status_card_enabled: false
     backup_ssh_key: /root/.ssh/id_ed25519
 
     # Cloudflare tunnel
@@ -116,3 +121,7 @@ all:
           # Failover tuning
           watchdog_check_interval: 30
           watchdog_fail_threshold: 3
+
+          # Optional: Discord webhook URL for Uptime Kuma alerts (a default
+          # notification attached to every monitor). Leave empty to skip.
+          watchdog_discord_webhook: ""

@@ -11,6 +11,7 @@
 #   watchdog_status_hostname  - hostname for Uptime Kuma (e.g. status-git.example.com)
 #   kuma_username / kuma_password - Uptime Kuma admin credentials
 #   primary_tailnet_ip / standby_tailnet_ip - Tailscale IPs for monitors
+#   watchdog_discord_webhook  - optional Discord webhook URL; adds a default notification to every monitor
 #   app_url                   - Forgejo public URL (for health check)
 
 - name: Determine if running locally
@@ -181,8 +182,10 @@
     --health-url "{{ app_url }}/api/healthz"
     --primary-host "{{ primary_tailnet_ip }}"
     --standby-host "{{ standby_tailnet_ip }}"
+    {% if watchdog_discord_webhook | default('') | length > 0 %}--discord-webhook "{{ watchdog_discord_webhook }}"{% endif %}
   args:
     chdir: "{{ watchdog_dir }}"
+  no_log: "{{ watchdog_discord_webhook | default('') | length > 0 }}"
   register: kuma_setup
 
 - name: Display Kuma setup result

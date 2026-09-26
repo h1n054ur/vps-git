@@ -13,10 +13,12 @@ Usage (inside Docker via compose):
     --password 'YourPassword' \
     --health-url https://git.example.com/api/healthz \
     --primary-host 100.x.x.x \
-    --standby-host 100.y.y.y
+    --standby-host 100.y.y.y \
+    --discord-webhook https://discord.com/api/webhooks/...   # optional
 """
 
 import argparse
+import os
 import sys
 import time
 import urllib.request
@@ -50,6 +52,9 @@ def main():
     parser.add_argument("--health-url", required=True, help="Forgejo health endpoint URL")
     parser.add_argument("--primary-host", required=True, help="Primary VPS IP (Tailscale/private)")
     parser.add_argument("--standby-host", required=True, help="Standby VPS IP (Tailscale/private)")
+    parser.add_argument("--discord-webhook", default="", help="Optional Discord webhook URL; creates a default notification attached to every monitor")
+    parser.add_argument("--discord-name", default="Discord #forgejo", help="Name of the Discord notification in Kuma")
+    parser.add_argument("--test-notification", action="store_true", help="Send a test message through the Discord notification")
     args = parser.parse_args()
 
     print(f"Connecting to Uptime Kuma at {args.url}...")
@@ -62,6 +67,7 @@ def main():
 
     needs_setup = False
     monitors = {}
+    notifications = []
 
     @sio.on("setup")
     def on_setup():
@@ -71,6 +77,10 @@ def main():
     @sio.on("monitorList")
     def on_monitor_list(data):
         monitors.update(data)
+
+    @sio.on("notificationList")
+    def on_notification_list(data):
+        notifications[:] = data
 
     sio.connect(args.url)
     time.sleep(2)  # let initial events arrive
@@ -203,6 +213,39 @@ def main():
                 print(f" FAIL: {resp.get('msg', 'unknown')}")
         except Exception as e:
             print(f" ERROR: {e}")
+
+    # ── Step 5: Discord notification (optional) ───────────────────────
+    # Kuma's own Discord provider only sends basic embeds, so this uses the
+    # Webhook provider with a Liquid template (discord-card.liquid) that posts a
+    # Components V2 card in the same style as GitNotify: accent colour by status
+    # (green up, red down, amber pending), target, error or response time,
+    # Discord timestamps, and link buttons to the status page and the target. isDefault attaches it to
+    # monitors created later; applyExisting attaches it to every monitor now.
+    # Idempotent: an existing notification with the same name is updated.
+    if args.discord_webhook:
+        time.sleep(1)  # let notificationList arrive
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "discord-card.liquid")) as f:
+            card_template = f.read()
+        existing = next((n for n in notifications if n.get("name") == args.discord_name), None)
+        sep = "&" if "?" in args.discord_webhook else "?"
+        notif = {
+            "name": args.discord_name,
+            "type": "webhook",
+            "isDefault": True,
+            "applyExisting": True,
+            # with_components lets a plain (non-bot) webhook post Components V2
+            "webhookURL": args.discord_webhook + sep + "with_components=true",
+            "webhookContentType": "custom",
+            "webhookCustomBody": card_template,
+            "webhookAdditionalHeaders": '{"Content-Type": "application/json"}',
+        }
+        notif_id = existing["id"] if existing else None
+        print(f"  {'UPDATE' if existing else 'ADD'}:  notification {args.discord_name}...", end="", flush=True)
+        resp = sio.call("addNotification", data=(notif, notif_id), timeout=10)
+        print(f" {'OK' if resp.get('ok') else 'FAIL: ' + str(resp.get('msg'))} (id={resp.get('id', notif_id)})")
+        if args.test_notification:
+            resp = sio.call("testNotification", data=notif, timeout=15)
+            print(f"  TEST: {'sent' if resp.get('ok') else 'FAIL: ' + str(resp.get('msg'))}")
 
     # ── Done ──────────────────────────────────────────────────────────
     # NOTE: No public status page is created. The Kuma dashboard (behind login)

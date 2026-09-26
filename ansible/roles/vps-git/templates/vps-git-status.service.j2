@@ -1,0 +1,9 @@
+# Managed by Ansible -- do not edit manually.
+[Unit]
+Description=Refresh the live vps-git status card in Discord (serving primary only)
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ vps_git_dir }}/stack/status-card.sh

@@ -306,6 +306,37 @@ docker exec -i vps-git-postgres pg_restore -U forgejo -d forgejo --clean --if-ex
 # Forgejo data: rsync the restored volume path back into stack_forgejo_data with Forgejo stopped
 ```
 
+### Notifications
+
+Everything posts to one Discord channel through a single channel webhook, as [Components V2](https://discord.com/developers/docs/components/reference) cards (accent colour by status, link buttons, no pings):
+
+```mermaid
+flowchart LR
+  subgraph node ["serving primary"]
+    status["status-card.sh<br/>(every 15 min)"]
+    bk["offsite-backup.sh"]
+    fence["fence.sh"]
+  end
+  kuma["Uptime Kuma<br/>(watchdog host)"]
+  fj["Forgejo org webhook"]
+  status -->|"edit in place"| card["live status card"]
+  bk -->|"edit in place"| card
+  fence -->|"edit in place"| card
+  bk -->|"new alert on failure"| ch["#channel"]
+  fence -->|"new alert on change"| ch
+  kuma -->|"down / up cards"| ch
+  fj -->|"push, PR, issue, release"| ch
+  card --- ch
+```
+
+- **Live status card:** one message that the serving primary edits in place, showing the serving node, Forgejo version and health, replication state and lag, fence decision, last and next backup, and disk use. The accent turns amber or red when something is off. Edits don't notify anyone, so failures also post a separate alert.
+  - **Create it once:** `stack/status-card.sh --create` prints the message id. Put it in `/etc/vps-git-backup/notify.env` as `STATUS_MESSAGE_ID` on both nodes, and pin the message.
+  - **Refresh:** `vps-git-status.timer` (every 15 min, enabled with `status_card_enabled`), plus every backup run and fence change.
+- **Alerts** (new messages, so they notify): a backup failure (step, exit code, last error), and a fence decision change (for example a node fencing itself after a failover).
+- **Uptime Kuma:** set `watchdog_discord_webhook` and `watchdog.yml` configures a default Webhook notification with a card template (`watchdog/setup-kuma/discord-card.liquid`), attached to every monitor: red when down, green when up, with the target, error or response time, and a status page button.
+- **Forgejo events:** add an org (or repo) webhook of type Discord. In Forgejo 16, a Discord hook created through the API can come up with empty Discord settings and fail with "cannot create http request"; create it in the web UI, or re-save it there.
+- **Secrets:** `stack/notify.sh` reads `DISCORD_WEBHOOK_URL` and `STATUS_MESSAGE_ID` from `/etc/vps-git-backup/notify.env` (see `stack/notify.env.example`). Never commit the real URL. Without the file, nothing is posted.
+
 ## Replication
 
 | Layer | Method | RPO |
@@ -395,6 +426,8 @@ vps-git/
   stack/
     compose.yml               Docker Compose (profiles: primary, standby)
     fence.sh                  Split-brain fence, run by vps-git-fence.timer
+    notify.sh                 Discord cards: alerts and the live status card
+    status-card.sh            Refresh (or --create) the live status card
     offsite-backup.sh         Nightly restic backup to R2, run by vps-git-offsite-backup.timer
     r2.env.example            Offsite backup target and credentials template
     env.example                Environment variable template

@@ -13,10 +13,14 @@
 #   anything else                     -> fence (stop forgejo, cloudflared, backup)
 #
 # Run by vps-git-fence.timer at boot and every minute. DRY_RUN=1 prints the
-# decision without acting. Standby nodes exit immediately.
+# decision without acting. Standby nodes exit immediately. A change of decision
+# (and the first decision after install) is posted to Discord as a card (notify.sh);
+# the last decision is kept in /var/lib/vps-git/fence.state (FENCE_STATE_FILE), and
+# the live status card (notify.sh) is refreshed after a change.
 set -euo pipefail
 cd "$(dirname "$0")"
 set -a; . ./.env; set +a
+. ./notify.sh
 
 log() { echo "fence: $*"; }
 compose() { docker compose --env-file .env "$@"; }
@@ -65,8 +69,32 @@ fi
 
 log "$decision: ${reason:-}"
 [ -n "${DRY_RUN:-}" ] && exit 0
+
+state_file=${FENCE_STATE_FILE:-/var/lib/vps-git/fence.state}
+previous=$(cat "$state_file" 2>/dev/null || true)
+if [ "$previous" != "$decision" ]; then
+  facts=("Host=$(hostname)" "Reason=${reason:-}" "Our timeline=${my_tl:-?}")
+  [ -n "${PEER_HOST:-}" ] && facts+=("Peer=\`$PEER_HOST\`" "Peer timeline=${peer_tl:-unknown}")
+  if [ -z "$previous" ]; then
+    notify_card info "Fence active on $(hostname)" "The split-brain fence is running here. First decision: **$decision**." \
+      "${facts[@]}" "button:Status page|${STATUS_URL:-https://status-git.h1n054ur.dev}" "button:Open Forgejo|${APP_URL:-https://git.h1n054ur.dev}"
+  elif [ "$decision" = fence ]; then
+    notify_card fence "$(hostname) fenced" "Forgejo, cloudflared and backup are stopped on this node: another node is the newest primary." \
+      "Decision=$previous → $decision" "${facts[@]}" "button:Status page|${STATUS_URL:-https://status-git.h1n054ur.dev}" "button:Open Forgejo|${APP_URL:-https://git.h1n054ur.dev}"
+  else
+    notify_card ok "$(hostname) serving" "This node is the newest primary and runs Forgejo again." \
+      "Decision=$previous → $decision" "${facts[@]}" "button:Status page|${STATUS_URL:-https://status-git.h1n054ur.dev}" "button:Open Forgejo|${APP_URL:-https://git.h1n054ur.dev}"
+  fi
+  mkdir -p "$(dirname "$state_file")"
+  echo "$decision" > "$state_file"
+  echo "${reason:-}" > "$(dirname "$state_file")/fence.reason"
+  changed=1
+fi
 if [ "$decision" = serve ]; then
   compose up -d >/dev/null 2>&1
 else
   compose stop forgejo cloudflared backup >/dev/null 2>&1 || true
 fi
+# Refresh the live status card after a change (only a serving primary edits it).
+[ -n "${changed:-}" ] && status_card_update
+exit 0
