@@ -4,34 +4,40 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
 
 ## Architecture
 
-```
-                       +-----------------------+
-                       |    Cloudflare Tunnel  |
-                       |   git.example.com     |
-                       +----------+------------+
-                                  |
-                  Tunnel connector (active node)
-                                  |
-            +---------------------+---------------------+
-            |                                           |
-   +--------v----------+                    +-----------v---------+
-   |  Primary (Berlin)  |   WAL streaming   |  Standby (Kansas)   |
-   |                    | ================> |                     |
-   |  postgres          |   forgejo rsync   |  postgres           |
-   |  forgejo           | ----------------> |  (hot standby)      |
-   |  cloudflared       |                   |                     |
-   |  backup sidecar    |                   |  cloudflared creds  |
-   +--------------------+                   |  (ready to start)   |
-            ^                               +---------------------+
-            |                                           ^
-            |          +-------------------+            |
-            +----------+  Watchdog (local) +------------+
-                       |                   |
-                       |  uptime-kuma      |
-                       |  failover agent   |
-                       |  cloudflared      |
-                       +-------------------+
-                       status-git.example.com
+```mermaid
+flowchart TB
+  users(["Users"]) --> cf["Cloudflare Tunnel<br/>git.example.com"]
+  cf -->|"tunnel connector<br/>(active node only)"| p
+
+  subgraph p ["Primary (Berlin)"]
+    direction TB
+    ppg[("Postgres")]
+    pfj["Forgejo"]
+    pcf["cloudflared"]
+    pbk["backup sidecar"]
+    pfence["fence timer"]
+  end
+
+  subgraph s ["Standby (Kansas)"]
+    direction TB
+    spg[("Postgres<br/>hot standby")]
+    sbk["synced Forgejo data"]
+    sfence["fence timer"]
+  end
+
+  ppg -->|"WAL streaming"| spg
+  pbk -->|"rsync over SSH"| sbk
+
+  subgraph w ["Watchdog (3rd machine)"]
+    kuma["Uptime Kuma"]
+    agent["failover agent"]
+  end
+
+  agent -->|"health check"| cf
+  kuma -.->|"Postgres and SSH monitors"| p
+  kuma -.-> s
+  agent -->|"promote.yml on failure"| s
+  pfence <-.->|"timeline check"| sfence
 ```
 
 **Primary** runs the full stack (Postgres, Forgejo, cloudflared, backup sidecar). **Standby** runs Postgres as a hot standby streaming replica and receives periodic Forgejo data rsyncs. If the primary goes down, the **watchdog** automatically promotes the standby via Ansible -- Cloudflare routes traffic to the new primary within seconds.
@@ -167,15 +173,61 @@ cd ansible
 ansible-playbook promote.yml
 ```
 
-### Failback
+### Split-brain fence
 
-Once the old primary is back online:
+Both nodes hold credentials for the same tunnel, so if both ran Forgejo, Cloudflare would send writes to either one. Each node runs `stack/fence.sh` from `vps-git-fence.timer` at boot and every minute. Forgejo, cloudflared and the backup sidecar are `restart: "no"`, so nothing serves until the fence has decided (the timer also restarts them if they crash). Every promotion moves Postgres to a new timeline, so the node that took over last always has the higher timeline:
 
-```sh
-ansible-playbook demote.yml -l standby -e init_standby_pg=true
+```mermaid
+flowchart TD
+  start(["fence.sh (boot, then every minute)"]) --> role{"ROLE=primary?"}
+  role -->|no| done(["exit: standby never serves"])
+  role -->|yes| peer{"peer Postgres<br/>reachable?"}
+  peer -->|no| serve["serve:<br/>compose up -d"]
+  peer -->|yes| sys{"same cluster<br/>system id?"}
+  sys -->|no| fence["fence:<br/>stop forgejo, cloudflared, backup"]
+  sys -->|yes| rec{"peer in recovery?"}
+  rec -->|"yes (standby)"| serve
+  rec -->|"no (primary)"| tl{"peer timeline<br/>lower than ours?"}
+  tl -->|yes| serve
+  tl -->|"no (peer took over)"| fence
 ```
 
-This wipes the promoted node's Postgres data, re-syncs from the current primary via `pg_basebackup`, and starts it as a streaming replica.
+`promote.yml` also stops the serving containers on the other node first when it can reach it, and `deploy.yml` refuses to start a primary while the standby runs Forgejo, or to re-initialise a standby that is serving as primary. Check a node's decision without acting: `DRY_RUN=1 /opt/vps-git/stack/fence.sh`.
+
+### Failback
+
+After a failover the promoted standby is the only up-to-date copy. When the old primary comes back it fences itself (its timeline is lower), so nothing is served twice, but its database is stale. **Do not re-initialise the promoted node from it.**
+
+```mermaid
+sequenceDiagram
+  participant W as Watchdog
+  participant B as Old primary (Berlin)
+  participant K as Standby (Kansas)
+  Note over B: goes down
+  W->>K: promote.yml (timeline 1 to 2)
+  K->>K: serves git.example.com
+  Note over B: comes back on timeline 1
+  B->>K: fence check: peer primary on timeline 2
+  B->>B: fenced, Forgejo stays stopped
+  Note over B,K: failback (operator)
+  B->>K: demote.yml -l primary-vps -e init_standby_pg=true<br/>(pg_basebackup from Kansas)
+  K-->>B: WAL streaming
+  W->>B: promote.yml -e promote_target=primary-vps (timeline 2 to 3)
+  K->>B: fence check: peer primary on timeline 3, K fences
+  K->>B: demote.yml -l standby-vps -e init_standby_pg=true
+  B-->>K: WAL streaming, back to normal
+```
+
+```sh
+cd ansible
+# pause the watchdog's failover agent first so it doesn't react mid-failback
+ansible-playbook demote.yml -l primary-vps -e init_standby_pg=true   # old primary becomes a replica of the promoted node
+# wait until it streams and has caught up (pg_stat_wal_receiver on primary-vps)
+ansible-playbook promote.yml -e promote_target=primary-vps           # stops the other node's services, promotes primary-vps
+ansible-playbook demote.yml -l standby-vps -e init_standby_pg=true   # the former promoted node becomes the standby again
+```
+
+Or skip the failback and keep the promoted node as primary: swap the `primary` and `standby` groups in your inventory, then run the first `demote.yml` line against the old primary.
 
 ## Replication
 
@@ -209,7 +261,7 @@ The nodes talk to each other only over a private network. [Tailscale](https://ta
 
 ### Avoiding split brain
 
-Both nodes hold credentials for the same tunnel, so if both run Forgejo, Cloudflare sends traffic to either one. After a failover, run `demote.yml` against the old primary before it comes back, or swap the `primary` / `standby` groups in your inventory. `deploy.yml` refuses to start a primary while the standby is running Forgejo, and refuses to re-initialise a standby that is serving as primary.
+See [Split-brain fence](#split-brain-fence). The fence needs the nodes to reach each other's Postgres over the tailnet (`tag:server` to `tag:server` on 5432 in the policy above).
 
 ## For developers: migrating from GitHub
 
@@ -265,6 +317,7 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 vps-git/
   stack/
     compose.yml               Docker Compose (profiles: primary, standby)
+    fence.sh                  Split-brain fence, run by vps-git-fence.timer
     env.example                Environment variable template
     postgres/
       init-replication.sh      Creates replication user on Postgres init

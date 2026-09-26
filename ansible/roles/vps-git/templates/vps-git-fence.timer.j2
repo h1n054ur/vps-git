@@ -1,0 +1,11 @@
+# Managed by Ansible -- do not edit manually.
+[Unit]
+Description=Run the vps-git split-brain fence at boot and every minute
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

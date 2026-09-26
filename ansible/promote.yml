@@ -3,7 +3,8 @@
 # Run this when the current primary is down.
 #
 # Usage:
-#   ansible-playbook promote.yml
+#   ansible-playbook promote.yml                              # promote the standby group
+#   ansible-playbook promote.yml -e promote_target=primary-vps  # failback: promote a demoted node
 #
 # What it does:
 #   1. Stops any running containers on standby
@@ -12,8 +13,20 @@
 #   4. Starts the full primary stack
 #   5. Verifies Forgejo is healthy
 
+- name: Fence the old primary if it is still reachable
+  hosts: "all:!{{ promote_target | default('standby') }}:!watchdog"
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Stop Forgejo, cloudflared and backup on the other node
+      shell: >
+        cd {{ vps_git_dir }}/stack &&
+        docker compose --env-file .env stop forgejo cloudflared backup
+      ignore_errors: true
+      ignore_unreachable: true
+
 - name: Promote standby to primary
-  hosts: standby
+  hosts: "{{ promote_target | default('standby') }}"
   become: true
   tasks:
     - name: Stop standby stack

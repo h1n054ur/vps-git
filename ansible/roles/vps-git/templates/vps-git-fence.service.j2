@@ -1,0 +1,10 @@
+# Managed by Ansible -- do not edit manually.
+[Unit]
+Description=vps-git split-brain fence (start or stop Forgejo by Postgres timeline)
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ vps_git_dir }}/stack/fence.sh

@@ -38,7 +38,8 @@ services:
   forgejo:
     image: ${FORGE_IMAGE:-codeberg.org/forgejo/forgejo:11}
     container_name: vps-git-forgejo
-    restart: unless-stopped
+    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
+    restart: "no"
     profiles: ["primary"]
     depends_on:
       postgres:
@@ -78,7 +79,8 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: vps-git-cloudflared
-    restart: unless-stopped
+    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
+    restart: "no"
     profiles: ["primary"]
     depends_on:
       forgejo:
@@ -93,7 +95,8 @@ services:
   backup:
     build: ./backup
     container_name: vps-git-backup
-    restart: unless-stopped
+    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
+    restart: "no"
     profiles: ["primary"]
     network_mode: host
     depends_on:
