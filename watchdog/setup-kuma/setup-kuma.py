@@ -48,8 +48,8 @@ def main():
     parser.add_argument("--username", required=True, help="Admin username to create")
     parser.add_argument("--password", required=True, help="Admin password")
     parser.add_argument("--health-url", required=True, help="Forgejo health endpoint URL")
-    parser.add_argument("--primary-host", required=True, help="Primary VPS IP (NetBird/private)")
-    parser.add_argument("--standby-host", required=True, help="Standby VPS IP (NetBird/private)")
+    parser.add_argument("--primary-host", required=True, help="Primary VPS IP (Tailscale/private)")
+    parser.add_argument("--standby-host", required=True, help="Standby VPS IP (Tailscale/private)")
     args = parser.parse_args()
 
     print(f"Connecting to Uptime Kuma at {args.url}...")
@@ -207,7 +207,7 @@ def main():
     # ── Done ──────────────────────────────────────────────────────────
     # NOTE: No public status page is created. The Kuma dashboard (behind login)
     # shows all monitors. A public status page would leak infrastructure details
-    # (NetBird IPs, internal hostnames, ports).
+    # (Tailscale IPs, internal hostnames, ports).
     print(f"\nDone. Monitors created: {created}, skipped: {skipped}.")
     sio.disconnect()
 

@@ -63,22 +63,19 @@ all:
     primary:
       hosts:
         primary-vps:
-          ansible_host: 203.0.113.10        # public or NetBird IP
+          ansible_host: 203.0.113.10        # public or Tailscale IP
           ansible_user: root
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          # NetBird IP that the standby uses to reach this node
-          netbird_ip: 100.x.x.x
-          peer_host: 100.y.y.y              # standby's NetBird IP
+          peer_host: 100.y.y.y              # standby's Tailscale IP
           pg_bind: "0.0.0.0"
 
     standby:
       hosts:
         standby-vps:
-          ansible_host: 198.51.100.20       # public or NetBird IP
+          ansible_host: 198.51.100.20       # public or Tailscale IP
           ansible_user: root
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          netbird_ip: 100.y.y.y
-          peer_host: 100.x.x.x              # primary's NetBird IP
+          peer_host: 100.x.x.x              # primary's Tailscale IP
           pg_bind: "0.0.0.0"
 
     # Watchdog -- Uptime Kuma + failover agent + cloudflared tunnel.
@@ -107,9 +104,9 @@ all:
           kuma_username: admin
           kuma_password: "CHANGEME"
 
-          # NetBird IPs for port monitors
-          primary_netbird_ip: 100.x.x.x
-          standby_netbird_ip: 100.y.y.y
+          # Tailscale IPs for port monitors
+          primary_tailnet_ip: 100.x.x.x
+          standby_tailnet_ip: 100.y.y.y
 
           # Failover tuning
           watchdog_check_interval: 30

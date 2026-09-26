@@ -48,7 +48,7 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
 ## Prerequisites
 
 - Two VPS nodes (Debian 12 / Ubuntu 24.04) with Docker installed
-- Private network connectivity between nodes ([NetBird](https://netbird.io/), WireGuard, Tailscale, etc.)
+- Private network connectivity between nodes ([Tailscale](https://tailscale.com/) recommended; WireGuard or similar also works)
 - Cloudflare account with a domain
 - Ansible on your control machine (`pip install ansible` or `brew install ansible`)
 - A machine to run the watchdog (your laptop, a 3rd VPS, etc.)
@@ -67,7 +67,7 @@ Edit `ansible/inventory.yml` with your:
 - VPS IPs and SSH key paths
 - Postgres and replication passwords (generate strong random ones)
 - Forgejo admin credentials (`forgejo_admin_user`, `forgejo_admin_password`, `forgejo_admin_email`)
-- NetBird/WireGuard peer IPs
+- Tailscale peer IPs
 - Cloudflare tunnel credentials path
 
 ### 2. Create a Cloudflare Tunnel
@@ -113,7 +113,7 @@ This deploys the full watchdog stack, creates an Uptime Kuma admin account, and 
 ```sh
 cd watchdog
 cp env.example .env
-# Edit .env with your health URL, SSH keys, Kuma credentials, NetBird IPs
+# Edit .env with your health URL, SSH keys, Kuma credentials, Tailscale IPs
 docker compose --env-file .env up -d
 
 # First time only: create Kuma admin + monitors
@@ -185,7 +185,7 @@ This wipes the promoted node's Postgres data, re-syncs from the current primary 
 | Forgejo data | rsync via backup sidecar | Up to `backup_interval` (configurable, default 60s) |
 | Postgres dumps | `pg_dump` via backup sidecar | Up to `backup_interval` |
 
-The backup sidecar runs on the primary and transfers data to the standby over the private network (NetBird/WireGuard) via SSH.
+The backup sidecar runs on the primary and transfers data to the standby over the private network (Tailscale) via SSH.
 
 ## For developers: migrating from GitHub
 
@@ -231,7 +231,7 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 | `watchdog_tunnel_uuid` | Cloudflare tunnel UUID for status page |
 | `watchdog_status_hostname` | Hostname for Uptime Kuma (e.g. `status-git.yourdomain.com`) |
 | `kuma_username` / `kuma_password` | Uptime Kuma admin credentials |
-| `primary_netbird_ip` / `standby_netbird_ip` | Private network IPs for port monitors |
+| `primary_tailnet_ip` / `standby_tailnet_ip` | Private network IPs for port monitors |
 | `watchdog_check_interval` | Seconds between health checks (default: 30) |
 | `watchdog_fail_threshold` | Consecutive failures before failover (default: 3) |
 

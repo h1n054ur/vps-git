@@ -5,5 +5,5 @@ CHECK_INTERVAL={{ watchdog_check_interval | default(30) }}
 FAIL_THRESHOLD={{ watchdog_fail_threshold | default(3) }}
 KUMA_USERNAME={{ kuma_username | default('admin') }}
 KUMA_PASSWORD={{ kuma_password }}
-PRIMARY_NETBIRD_IP={{ primary_netbird_ip }}
-STANDBY_NETBIRD_IP={{ standby_netbird_ip }}
+PRIMARY_TAILNET_IP={{ primary_tailnet_ip }}
+STANDBY_TAILNET_IP={{ standby_tailnet_ip }}

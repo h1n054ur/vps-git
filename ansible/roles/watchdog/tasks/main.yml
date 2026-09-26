@@ -10,7 +10,7 @@
 #   watchdog_tunnel_credentials_file - path to tunnel credentials JSON
 #   watchdog_status_hostname  - hostname for Uptime Kuma (e.g. status-git.example.com)
 #   kuma_username / kuma_password - Uptime Kuma admin credentials
-#   primary_netbird_ip / standby_netbird_ip - NetBird IPs for monitors
+#   primary_tailnet_ip / standby_tailnet_ip - Tailscale IPs for monitors
 #   app_url                   - Forgejo public URL (for health check)
 
 - name: Determine if running locally
@@ -26,11 +26,19 @@
       apt:
         update_cache: yes
         cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
 
     - name: Install base packages
       apt:
         name: [curl, git, ca-certificates, gnupg]
         state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install base packages (non-Debian)
+      package:
+        name: [curl, git]
+        state: present
+      when: ansible_os_family != "Debian"
 
     - name: Check if Docker is installed
       command: docker --version
@@ -38,8 +46,13 @@
       ignore_errors: true
       changed_when: false
 
+    - name: Require Docker on non-Debian hosts
+      fail:
+        msg: "Install Docker and the compose plugin on this host first; automatic install is Debian/Ubuntu only."
+      when: docker_check.rc != 0 and ansible_os_family != "Debian"
+
     - name: Install Docker (if not present)
-      when: docker_check.rc != 0
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
       block:
         - name: Add Docker GPG key
           shell: |
@@ -166,8 +179,8 @@
     --username "{{ kuma_username }}"
     --password "{{ kuma_password }}"
     --health-url "{{ app_url }}/api/healthz"
-    --primary-host "{{ primary_netbird_ip }}"
-    --standby-host "{{ standby_netbird_ip }}"
+    --primary-host "{{ primary_tailnet_ip }}"
+    --standby-host "{{ standby_tailnet_ip }}"
   args:
     chdir: "{{ watchdog_dir }}"
   register: kuma_setup

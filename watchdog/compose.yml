@@ -1,3 +1,5 @@
+name: git-watchdog
+
 # Watchdog stack -- monitoring + automatic failover.
 # Runs locally or on any 3rd machine with network access to both VPS nodes.
 #
@@ -55,8 +57,8 @@ services:
       KUMA_USERNAME: ${KUMA_USERNAME:-admin}
       KUMA_PASSWORD: ${KUMA_PASSWORD}
       HEALTH_URL: ${PRIMARY_HEALTH_URL}
-      PRIMARY_HOST: ${PRIMARY_NETBIRD_IP}
-      STANDBY_HOST: ${STANDBY_NETBIRD_IP}
+      PRIMARY_HOST: ${PRIMARY_TAILNET_IP}
+      STANDBY_HOST: ${STANDBY_TAILNET_IP}
 
 volumes:
   kuma_data:
