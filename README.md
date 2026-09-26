@@ -265,6 +265,47 @@ docker start vps-git-failover
 
 The standby's Postgres is a physical replica, so it follows the schema migrations on its own.
 
+### Offsite backups
+
+Replication and the backup sidecar protect against losing a node, not against mistakes: a deleted repo or a bad migration reaches the standby within seconds. `stack/offsite-backup.sh` adds encrypted, versioned backups to an S3-compatible bucket with [restic](https://restic.net/). Cloudflare R2 is what this is tested with (free egress, and a few hundred MB fits the free tier).
+
+- Runs nightly from `vps-git-offsite-backup.timer` (23:30 UTC) on both nodes, but only the **serving primary** backs up: `ROLE=primary` and Forgejo running. A standby or a fenced node logs "not serving, skipping".
+- Each run: `pg_dump -Fc` plus the `forgejo_data` volume, then `restic forget --keep-daily 30 --keep-monthly 12 --prune`, and on Sundays `restic check --read-data-subset 5%`.
+- Snapshots use a fixed `--host bts-forgejo`, so after a failover the promoted node continues the same history.
+- Exits non-zero on failure, so the unit shows as failed (`systemctl status vps-git-offsite-backup`).
+
+```mermaid
+flowchart LR
+  timer["vps-git-offsite-backup.timer<br/>(both nodes, 23:30 UTC)"] --> gate{"ROLE=primary and<br/>Forgejo running?"}
+  gate -->|no| skip(["skip: standby or fenced"])
+  gate -->|yes| dump["pg_dump -Fc"]
+  dump --> backup["restic backup<br/>dump + forgejo_data"]
+  backup --> bucket[("R2 bucket<br/>encrypted, deduplicated")]
+  backup --> forget["forget: 30 daily,<br/>12 monthly, prune"]
+  forget --> check["Sundays: restic check<br/>5% of data"]
+```
+
+**Setup** (once):
+
+1. Create a bucket and an API token scoped to it (R2: Object Read & Write on that bucket only).
+2. Install restic on both nodes (the official release binary; distro packages are often old).
+3. On both nodes, as root: `/etc/vps-git-backup/r2.env` from [`stack/r2.env.example`](stack/r2.env.example), and `/etc/vps-git-backup/restic-password` with one random password (the same on both nodes). Both mode 600. **Keep an offline copy of the password**: without it the backups cannot be read.
+4. `set -a; . /etc/vps-git-backup/r2.env; set +a; RESTIC_PASSWORD_FILE=/etc/vps-git-backup/restic-password restic init`
+5. Set `offsite_backup_enabled: true` in the inventory and run `deploy.yml`, or install the two units from `ansible/roles/vps-git/templates/` by hand.
+6. Check a node's decision without backing up: `DRY_RUN=1 /opt/vps-git/stack/offsite-backup.sh`.
+
+**Restore:**
+
+```sh
+set -a; . /etc/vps-git-backup/r2.env; set +a
+export RESTIC_PASSWORD_FILE=/etc/vps-git-backup/restic-password
+restic snapshots --host bts-forgejo
+restic restore latest --host bts-forgejo --target /var/tmp/restore
+# database: into a stopped or fresh stack
+docker exec -i vps-git-postgres pg_restore -U forgejo -d forgejo --clean --if-exists < /var/tmp/restore/var/tmp/vps-git-backup/forgejo-pg.dump
+# Forgejo data: rsync the restored volume path back into stack_forgejo_data with Forgejo stopped
+```
+
 ## Replication
 
 | Layer | Method | RPO |
@@ -354,6 +395,8 @@ vps-git/
   stack/
     compose.yml               Docker Compose (profiles: primary, standby)
     fence.sh                  Split-brain fence, run by vps-git-fence.timer
+    offsite-backup.sh         Nightly restic backup to R2, run by vps-git-offsite-backup.timer
+    r2.env.example            Offsite backup target and credentials template
     env.example                Environment variable template
     postgres/
       init-replication.sh      Creates replication user on Postgres init

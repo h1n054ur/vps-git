@@ -38,6 +38,11 @@ all:
     #   300 = every 5 min
     #   900 = every 15 min  (lighter on resources)
     backup_interval: 60
+
+    # Offsite backups (restic to R2 or any S3-compatible store), nightly from the
+    # serving primary only. Needs /etc/vps-git-backup/r2.env and restic-password
+    # on each node, created by hand (see README "Offsite backups").
+    offsite_backup_enabled: false
     backup_ssh_key: /root/.ssh/id_ed25519
 
     # Cloudflare tunnel

@@ -1,0 +1,10 @@
+# Managed by Ansible -- do not edit manually.
+[Unit]
+Description=vps-git offsite backup to R2 with restic (serving primary only)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ vps_git_dir }}/stack/offsite-backup.sh

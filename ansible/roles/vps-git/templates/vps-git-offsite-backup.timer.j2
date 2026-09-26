@@ -1,0 +1,11 @@
+# Managed by Ansible -- do not edit manually.
+[Unit]
+Description=Nightly vps-git offsite backup
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 UTC
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target
