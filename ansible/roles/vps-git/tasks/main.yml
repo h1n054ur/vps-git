@@ -60,6 +60,40 @@
   shell: docker build -t vps-git-backup "{{ vps_git_dir }}/stack/backup"
   changed_when: true
 
+# Split-brain guards: two nodes serving Forgejo behind the same tunnel means
+# writes land on whichever node Cloudflare picks.
+- name: Check whether the standby is running Forgejo
+  shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.get('standby', []) }}"
+  register: standby_forgejo
+  changed_when: false
+  ignore_unreachable: true
+  when: node_role == "primary" and not (allow_dual_primary | default(false) | bool)
+
+- name: Refuse to start a second primary
+  fail:
+    msg: >-
+      Forgejo is running on the standby ({{ groups['standby'] | join(', ') }}), so it is serving as
+      primary. Run demote.yml against it (or swap the inventory groups) before deploying this node
+      as primary. Override with -e allow_dual_primary=true only if you know why.
+  when: >-
+    node_role == "primary" and not (allow_dual_primary | default(false) | bool) and
+    (standby_forgejo.results | default([]) | selectattr('stdout', 'defined') | map(attribute='stdout') | select | list | length > 0)
+
+- name: Check whether this standby is serving as primary
+  shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
+  register: local_forgejo
+  changed_when: false
+  when: node_role == "standby"
+
+- name: Refuse to reinitialise a node that is serving as primary
+  fail:
+    msg: >-
+      Forgejo is running on this node, so it is serving as primary (for example after promote.yml).
+      Re-initialising it as a standby would wipe its database. Demote it or update the inventory first.
+  when: node_role == "standby" and local_forgejo.stdout | default('') | length > 0
+
 - name: Stop existing stack
   shell: >
     cd {{ vps_git_dir }}/stack &&

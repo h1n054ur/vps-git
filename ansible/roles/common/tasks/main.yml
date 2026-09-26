@@ -59,3 +59,16 @@
     name: docker
     state: started
     enabled: true
+
+# Postgres binds to the node's tailnet IP. Docker can start before the tailnet
+# interface has its address, so allow binding to an address that isn't up yet.
+- name: Allow binding to the tailnet IP before it is up
+  copy:
+    dest: /etc/sysctl.d/60-tailscale-bind.conf
+    content: "net.ipv4.ip_nonlocal_bind = 1\n"
+    mode: "0644"
+  register: nonlocal_bind
+
+- name: Apply nonlocal bind sysctl
+  command: sysctl -p /etc/sysctl.d/60-tailscale-bind.conf
+  when: nonlocal_bind is changed

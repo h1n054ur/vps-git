@@ -67,7 +67,7 @@ all:
           ansible_user: root
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
           peer_host: 100.y.y.y              # standby's Tailscale IP
-          pg_bind: "0.0.0.0"
+          pg_bind: "100.x.x.x"               # this node's Tailscale IP
 
     standby:
       hosts:
@@ -76,7 +76,7 @@ all:
           ansible_user: root
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
           peer_host: 100.x.x.x              # primary's Tailscale IP
-          pg_bind: "0.0.0.0"
+          pg_bind: "100.x.x.x"               # this node's Tailscale IP
 
     # Watchdog -- Uptime Kuma + failover agent + cloudflared tunnel.
     # Use localhost for local deployment, or a remote host for a 3rd VPS.

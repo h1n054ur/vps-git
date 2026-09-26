@@ -187,6 +187,30 @@ This wipes the promoted node's Postgres data, re-syncs from the current primary 
 
 The backup sidecar runs on the primary and transfers data to the standby over the private network (Tailscale) via SSH.
 
+## Networking
+
+The nodes talk to each other only over a private network. [Tailscale](https://tailscale.com/) is what this stack is tested with.
+
+- **Bind Postgres to each node's own Tailscale IP** (`pg_bind`), not `0.0.0.0`. Docker port publishing bypasses host firewalls like ufw, so a `0.0.0.0` bind is reachable from anywhere your provider firewall allows. The `common` role sets `net.ipv4.ip_nonlocal_bind=1`, so the bind still works when Docker starts before `tailscaled` has its address.
+- **Don't rely on `pg_hba` source addresses.** Connections arrive through Docker's port proxy, so Postgres sees the Docker bridge address rather than the peer's Tailscale IP. The bind plus your tailnet policy are the access controls.
+- **Restrict the tailnet.** Tag the nodes and only allow what the stack needs:
+
+```jsonc
+"tagOwners": {"tag:server": ["autogroup:admin"], "tag:watchdog": ["autogroup:admin"]},
+"grants": [
+  // Replication (5432) and backup rsync (22) between the two nodes.
+  {"src": ["tag:server"],   "dst": ["tag:server"], "ip": ["tcp:22", "tcp:5432", "icmp:*"]},
+  // Watchdog: Postgres/SSH monitors and Ansible promote/demote.
+  {"src": ["tag:watchdog"], "dst": ["tag:server"], "ip": ["tcp:22", "tcp:5432", "icmp:*"]},
+],
+```
+
+- **Open UDP 41641 inbound** in your provider firewall so the nodes connect directly instead of through Tailscale's relays. Nothing else needs to be public: Forgejo and the status page are served through Cloudflare Tunnel.
+
+### Avoiding split brain
+
+Both nodes hold credentials for the same tunnel, so if both run Forgejo, Cloudflare sends traffic to either one. After a failover, run `demote.yml` against the old primary before it comes back, or swap the `primary` / `standby` groups in your inventory. `deploy.yml` refuses to start a primary while the standby is running Forgejo, and refuses to re-initialise a standby that is serving as primary.
+
 ## For developers: migrating from GitHub
 
 If you have an existing clone of a repo that's been mirrored to this Forgejo instance:
@@ -225,7 +249,7 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 | `app_url` | Public URL (e.g. `https://git.yourdomain.com`) |
 | `tunnel_credentials_file` | Path to Cloudflare tunnel credentials JSON |
 | `peer_host` | Private network IP of the peer node |
-| `pg_bind` | Postgres bind address (`0.0.0.0` on both nodes for monitoring) |
+| `pg_bind` | Postgres bind address: the node's own Tailscale IP (see [Networking](#networking)) |
 | `backup_interval` | Seconds between backup/sync runs (default: 60) |
 | `backup_ssh_key` | SSH private key for rsync between nodes |
 | `watchdog_tunnel_uuid` | Cloudflare tunnel UUID for status page |
