@@ -36,7 +36,7 @@ services:
       -c listen_addresses='*'
 
   forgejo:
-    image: ${FORGE_IMAGE:-codeberg.org/forgejo/forgejo:11}
+    image: ${FORGE_IMAGE:-codeberg.org/forgejo/forgejo:16}
     container_name: vps-git-forgejo
     # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
     restart: "no"

@@ -229,6 +229,42 @@ ansible-playbook demote.yml -l standby-vps -e init_standby_pg=true   # the forme
 
 Or skip the failback and keep the promoted node as primary: swap the `primary` and `standby` groups in your inventory, then run the first `demote.yml` line against the old primary.
 
+### Upgrading Forgejo
+
+Forgejo migrations are one-way, so the only rollback is restoring a backup taken with Forgejo stopped. Tested going straight from 11.0 to 16.0 (supported per the [upgrade guide](https://forgejo.org/docs/latest/admin/upgrade/)); read the release notes for breaking changes first.
+
+```mermaid
+flowchart LR
+  a["Pause watchdog<br/>failover agent"] --> b["Stop fence timer<br/>on primary"]
+  b --> c["flush-queues,<br/>stop forgejo + backup"]
+  c --> d["Backup: pg_dump +<br/>forgejo_data tarball"]
+  d --> e["Bump FORGE_IMAGE,<br/>compose up -d forgejo"]
+  e --> f{"healthy +<br/>doctor ok?"}
+  f -->|yes| g["Start backup + fence timer,<br/>bump standby .env,<br/>resume failover agent"]
+  f -->|no| h["Restore backup<br/>with old image"]
+```
+
+```sh
+# watchdog host
+docker stop vps-git-failover
+# primary
+cd /opt/vps-git/stack && . ./.env
+systemctl stop vps-git-fence.timer
+docker exec -u git vps-git-forgejo forgejo manager flush-queues
+docker stop vps-git-forgejo vps-git-backup
+docker exec vps-git-postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > /opt/vps-git/pre-upgrade.dump
+tar -C /var/lib/docker/volumes/stack_forgejo_data/_data -czf /opt/vps-git/pre-upgrade-data.tgz .
+sed -i 's|^FORGE_IMAGE=.*|FORGE_IMAGE=codeberg.org/forgejo/forgejo:16|' .env
+docker compose --env-file .env up -d forgejo      # migrations run on first start
+docker exec -u git vps-git-forgejo forgejo doctor check --all
+docker compose --env-file .env up -d backup && systemctl start vps-git-fence.timer
+# standby: set the same FORGE_IMAGE in its .env (and forge_image in the inventory) so a promotion runs the new version
+# watchdog host
+docker start vps-git-failover
+```
+
+The standby's Postgres is a physical replica, so it follows the schema migrations on its own.
+
 ## Replication
 
 | Layer | Method | RPO |

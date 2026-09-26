@@ -19,7 +19,7 @@ all:
     # App config
     app_name: vps-git
     app_url: "https://git.example.com"
-    forge_image: "codeberg.org/forgejo/forgejo:11"
+    forge_image: "codeberg.org/forgejo/forgejo:16"
 
     # Forgejo admin user (created on first deploy)
     forgejo_admin_user: "admin"
