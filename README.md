@@ -2,6 +2,8 @@
 
 Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, streaming replication, automatic failover, a split-brain fence, encrypted offsite backups and Discord alerts, deployed and managed entirely through Ansible.
 
+> **Where development happens:** the primary copy of this repo lives on the author's own Forgejo instance (running this very stack), and this GitHub repo is a push mirror that updates on every commit. Cloning, stars, issues and pull requests here on GitHub are all fine; accepted changes are applied upstream and mirrored back.
+
 ## Architecture
 
 ```mermaid
