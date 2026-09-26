@@ -1,6 +1,6 @@
 # vps-git
 
-Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, streaming replication, automatic failover, and zero-downtime recovery -- deployed and managed entirely through Ansible.
+Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, streaming replication, automatic failover, a split-brain fence, encrypted offsite backups and Discord alerts, deployed and managed entirely through Ansible.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ flowchart TB
   pfence <-.->|"timeline check"| sfence
 ```
 
-**Primary** runs the full stack (Postgres, Forgejo, cloudflared, backup sidecar). **Standby** runs Postgres as a hot standby streaming replica and receives periodic Forgejo data rsyncs. If the primary goes down, the **watchdog** automatically promotes the standby via Ansible -- Cloudflare routes traffic to the new primary within seconds.
+**Primary** runs the full stack (Postgres, Forgejo, cloudflared, backup sidecar). **Standby** runs Postgres as a hot standby streaming replica and receives periodic Forgejo data rsyncs. If the primary goes down, the **watchdog** automatically promotes the standby via Ansible, and Cloudflare routes traffic to the new primary within seconds. A fence on each node makes sure only the newest primary ever serves.
 
 ## Components
 
@@ -97,7 +97,7 @@ ansible-playbook deploy.yml -l primary
 ansible-playbook deploy.yml -l standby -e init_standby_pg=true
 ```
 
-Forgejo will be live at your configured URL with the admin user pre-created. No manual web setup required.
+Forgejo will be live at your configured URL with the admin user pre-created. No manual web setup required. The role also installs `vps-git-fence.timer` on both nodes: from then on the fence, not Docker, starts Forgejo, cloudflared and the backup sidecar (see [Split-brain fence](#split-brain-fence)). Set `offsite_backup_enabled` and `status_card_enabled` to also install the backup and status card timers.
 
 ### 4. Deploy the watchdog
 
@@ -130,13 +130,14 @@ docker compose --env-file .env run --rm setup-kuma \
   --health-url https://git.yourdomain.com/api/healthz \
   --primary-host 100.x.x.x \
   --standby-host 100.y.y.y
+  # optional: --discord-webhook 'https://discord.com/api/webhooks/...' (see Notifications)
 ```
 
 The stack includes:
-- **Uptime Kuma** -- monitoring dashboard (login-protected, no public status page)
-- **Failover agent** -- health-checks the primary, auto-runs `promote.yml` after consecutive failures
-- **cloudflared** -- tunnels the dashboard to your status domain
-- **setup-kuma** -- one-shot container that creates the admin account and all monitors
+- **Uptime Kuma:** monitoring dashboard (login-protected, no public status page)
+- **Failover agent:** health-checks the primary, auto-runs `promote.yml` after consecutive failures
+- **cloudflared:** tunnels the dashboard to your status domain
+- **setup-kuma:** one-shot container that creates the admin account and all monitors, and (with `--discord-webhook`) the Discord alert notification
 
 ### 5. Verify
 
@@ -158,11 +159,14 @@ ssh root@primary "docker exec vps-git-postgres psql -U forgejo -d forgejo \
 
 The watchdog checks the primary's health endpoint every 30 seconds. After 3 consecutive failures (configurable), it runs `promote.yml` which:
 
-1. Stops standby containers
-2. Promotes Postgres out of recovery (removes `standby.signal`)
-3. Restores latest Forgejo data from backup sync
-4. Starts the full primary stack (Postgres, Forgejo, cloudflared, backup)
-5. Cloudflare tunnel routes traffic to the new primary automatically
+1. Stops Forgejo, cloudflared and the backup sidecar on the old primary, if it can still reach it
+2. Stops standby containers
+3. Promotes Postgres out of recovery (removes `standby.signal`), which starts a new timeline
+4. Restores latest Forgejo data from backup sync
+5. Starts the full primary stack (Postgres, Forgejo, cloudflared, backup)
+6. Cloudflare tunnel routes traffic to the new primary automatically
+
+If the old primary comes back later, its fence sees a primary on a newer timeline and keeps Forgejo stopped. See [Failback](#failback) to make it the primary again.
 
 A 1-hour cooldown prevents repeated failovers.
 
@@ -325,7 +329,7 @@ flowchart LR
   bk -->|"new alert on failure"| ch["#channel"]
   fence -->|"new alert on change"| ch
   kuma -->|"down / up cards"| ch
-  fj -->|"push, PR, issue, release"| ch
+  fj -->|"push, PR, issue, comment, release"| ch
   card --- ch
 ```
 
@@ -418,6 +422,14 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 | `primary_tailnet_ip` / `standby_tailnet_ip` | Private network IPs for port monitors |
 | `watchdog_check_interval` | Seconds between health checks (default: 30) |
 | `watchdog_fail_threshold` | Consecutive failures before failover (default: 3) |
+| `watchdog_discord_webhook` | Discord webhook for Uptime Kuma alert cards (empty: skip) |
+| `forge_image` | Forgejo image (default `codeberg.org/forgejo/forgejo:16`); see [Upgrading Forgejo](#upgrading-forgejo) |
+| `mail_from` / `cf_api_token` | Sender address and Cloudflare Email Sending token for Forgejo mail (SMTP) |
+| `github_oauth_client_id` / `github_oauth_client_secret` | GitHub OAuth app for "Sign in with GitHub" |
+| `offsite_backup_enabled` | Install the nightly restic backup timer (default: false); see [Offsite backups](#offsite-backups) |
+| `status_card_enabled` | Install the 15-minute live status card timer (default: false); see [Notifications](#notifications) |
+
+Run-time options: `-e init_standby_pg=true` (deploy or demote: rebuild the replica from the peer), `-e promote_target=<host>` (promote a node other than the `standby` group, for failback), and `-e allow_dual_primary=true` (override the deploy guard; don't).
 
 ## Repository layout
 
@@ -430,6 +442,7 @@ vps-git/
     status-card.sh            Refresh (or --create) the live status card
     offsite-backup.sh         Nightly restic backup to R2, run by vps-git-offsite-backup.timer
     r2.env.example            Offsite backup target and credentials template
+    notify.env.example        Discord webhook and status card message id template
     env.example                Environment variable template
     postgres/
       init-replication.sh      Creates replication user on Postgres init
@@ -445,7 +458,7 @@ vps-git/
     watchdog.yml               Deploy watchdog stack
     roles/
       common/                  Base packages + Docker
-      vps-git/                 Stack deployment + config templating
+      vps-git/                 Stack deployment, config templating, fence/backup/status timers
       watchdog/                Watchdog deployment + Kuma auto-setup
   watchdog/
     compose.yml                Uptime Kuma + failover + cloudflared + setup-kuma
@@ -456,7 +469,8 @@ vps-git/
       entrypoint.sh            SSH config setup
     setup-kuma/
       Dockerfile
-      setup-kuma.py            Socket.IO script: creates admin + monitors
+      setup-kuma.py            Socket.IO script: creates admin, monitors, Discord notification
+      discord-card.liquid      Uptime Kuma alert card template (Components V2)
   cloudflared/
     config.yml.example         Tunnel ingress template
 ```
