@@ -339,10 +339,10 @@ flowchart LR
 - **Watching the watchdog:** Uptime Kuma can't report its own outage, so the status card job on the serving primary checks `watchdog_url` and posts one alert card when it becomes unreachable (Kuma alerts are silent) and one when it recovers.
   - **Create it once:** `stack/status-card.sh --create` prints the message id. Put it in `/etc/vps-git-backup/notify.env` as `STATUS_MESSAGE_ID` on both nodes, and pin the message.
   - **Refresh:** `vps-git-status.timer` (every 15 min, enabled with `status_card_enabled`), plus every backup run and fence change.
-- **Alerts** (new messages, so they notify): a backup failure (step, exit code, last error), and a fence decision change (for example a node fencing itself after a failover).
+- **Alerts** (new messages, so they notify): a backup failure (step, exit code, last error), a fence decision change (for example a node fencing itself after a failover), and the watchdog becoming unreachable or recovering.
 - **Uptime Kuma:** set `watchdog_discord_webhook` and `watchdog.yml` configures a default Webhook notification with a card template (`watchdog/setup-kuma/discord-card.liquid`), attached to every monitor: red when down, green when up, with the target, error or response time, and a status page button.
 - **Forgejo events:** add an org (or repo) webhook of type Discord. In Forgejo 16, a Discord hook created through the API can come up with empty Discord settings and fail with "cannot create http request"; create it in the web UI, or re-save it there.
-- **Secrets:** `stack/notify.sh` reads `DISCORD_WEBHOOK_URL` and `STATUS_MESSAGE_ID` from `/etc/vps-git-backup/notify.env` (see `stack/notify.env.example`). Never commit the real URL. Without the file, nothing is posted.
+- **Secrets:** `stack/notify.sh` reads `DISCORD_WEBHOOK_URL`, `STATUS_MESSAGE_ID` and the optional `FORGEJO_STATUS_TOKEN` from `/etc/vps-git-backup/notify.env` (see `stack/notify.env.example`). Never commit the real URL. Without the file, nothing is posted.
 
 ## Replication
 
