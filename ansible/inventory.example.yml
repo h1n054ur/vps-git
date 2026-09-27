@@ -48,6 +48,8 @@ all:
     # Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in /etc/vps-git-backup/notify.env
     # (see README "Notifications"; create the card once with stack/status-card.sh --create).
     status_card_enabled: false
+    # Watchdog status page checked by the status card (empty = skip), e.g. "https://status-git.example.com"
+    watchdog_url: ""
     backup_ssh_key: /root/.ssh/id_ed25519
 
     # Cloudflare tunnel

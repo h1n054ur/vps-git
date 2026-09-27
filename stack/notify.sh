@@ -67,8 +67,17 @@ PY
 #
 # Backup results come from /var/lib/vps-git/last-backup.json (offsite-backup.sh), the
 # fence decision from /var/lib/vps-git/fence.state and fence.reason (fence.sh).
+# Optional lines: "Watchdog" when WATCHDOG_URL is set in .env (any 2xx/3xx counts as
+# reachable), and "Runners" when FORGEJO_STATUS_TOKEN (read:admin) is in notify.env.
+# watchdog_http_code: HTTP status of WATCHDOG_URL, "" when unset, 000 when unreachable.
+watchdog_http_code() {
+  [ -n "${WATCHDOG_URL:-}" ] || return 0
+  curl -s -o /dev/null --max-time 10 -w '%{http_code}' "$WATCHDOG_URL" || true
+}
+
 status_card_payload() {
   local state_dir=${VPS_GIT_STATE:-/var/lib/vps-git} version healthz repl peer_ok next disk
+  local watchdog runners token
   version=$(docker exec -u git vps-git-forgejo forgejo --version 2>/dev/null | awk '{print $3}' | cut -d+ -f1 || true)
   healthz=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' "${APP_URL:-https://git.h1n054ur.dev}/api/healthz" || true)
   repl=$(docker exec vps-git-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc \
@@ -80,13 +89,21 @@ status_card_payload() {
   next=$(systemctl show -p NextElapseUSecRealtime --value vps-git-offsite-backup.timer 2>/dev/null || true)
   if [ -n "$next" ]; then next=$(date -d "$next" +%s 2>/dev/null || true); fi
   disk=$(df -h --output=used,size,pcent / 2>/dev/null | tail -1 | awk '{print $1 " / " $2 " (" $3 ")"}' || true)
+  watchdog=$(watchdog_http_code)
+  token=$(sed -n 's/^FORGEJO_STATUS_TOKEN=//p' "${NOTIFY_ENV:-/etc/vps-git-backup/notify.env}" 2>/dev/null | tail -1 || true)
+  runners=""
+  if [ -n "$token" ]; then
+    runners=$(curl -s --max-time 10 -H "Authorization: token $token" \
+      "http://127.0.0.1:3000/api/v1/admin/actions/runners" 2>/dev/null || true)
+  fi
   python3 - "$(hostname)" "${version:-?}" "${healthz:-000}" "$repl" "$peer_ok" "${PEER_HOST:-}" \
     "$(cat "$state_dir/fence.state" 2>/dev/null)" "$(cat "$state_dir/fence.reason" 2>/dev/null)" \
     "$state_dir/last-backup.json" "$next" "$disk" \
-    "${APP_URL:-https://git.h1n054ur.dev}" "${STATUS_URL:-https://status-git.h1n054ur.dev}" <<'PY'
+    "${APP_URL:-https://git.h1n054ur.dev}" "${STATUS_URL:-https://status-git.h1n054ur.dev}" \
+    "${WATCHDOG_URL:-}" "$watchdog" "$runners" <<'PY'
 import json, sys, time
 (host, version, healthz, repl, peer_ok, peer, fence, fence_reason, backup_file,
- next_run, disk, app_url, status_url) = sys.argv[1:]
+ next_run, disk, app_url, status_url, watchdog_url, watchdog, runners_raw) = sys.argv[1:]
 problems, warnings = [], []
 if healthz != "200":
     problems.append(f"public healthz {healthz}")
@@ -103,6 +120,25 @@ if backup and backup.get("result") != "ok":
     problems.append(f"last backup failed at {backup.get('step', '?')}")
 elif not backup:
     warnings.append("no backup recorded yet")
+watchdog_line = ""
+if watchdog_url:
+    if watchdog[:1] in ("2", "3"):
+        watchdog_line = "**Watchdog:** reachable"
+    else:
+        watchdog_line = f"**Watchdog:** \U0001F6A8 unreachable (HTTP {watchdog or '000'}), Uptime Kuma alerts are silent"
+        warnings.append("watchdog unreachable")
+runners_line = ""
+if runners_raw:
+    try:
+        runners = json.loads(runners_raw)
+        runners = runners.get("runners", runners) if isinstance(runners, dict) else runners
+        names = [f"{r.get('name', '?')} {r.get('status', '?')}" for r in runners]
+        offline = [r.get("name", "?") for r in runners if r.get("status") == "offline"]
+        runners_line = f"**Runners:** {len(runners) - len(offline)}/{len(runners)} online · " + ", ".join(names)
+        if offline:
+            warnings.append("runner offline: " + ", ".join(offline))
+    except ValueError:
+        runners_line = "**Runners:** unknown (API error)"
 if problems:
     accent, overall = 0x7F1D1D, "\U0001F6A8 **Failure:** " + ", ".join(problems + warnings)
 elif warnings:
@@ -130,7 +166,9 @@ divider = {"type": 14, "divider": True, "spacing": 1}
 parts = [
     {"type": 10, "content": f"### \U0001F5A5️ vps-git status\n{overall}"},
     divider,
-    {"type": 10, "content": f"**Forgejo:** serving on `{host}` · v{version} · public healthz {healthz}\n{repl_line}\n{fence_line}"},
+    {"type": 10, "content": "\n".join(x for x in (
+        f"**Forgejo:** serving on `{host}` · v{version} · public healthz {healthz}",
+        repl_line, fence_line, watchdog_line, runners_line) if x)},
     divider,
     {"type": 10, "content": f"{backup_line}\n{next_line}\n**Disk ({host}):** {disk}"},
     {"type": 10, "content": f"-# updated <t:{int(time.time())}:R> by {host}"},

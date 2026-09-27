@@ -335,7 +335,8 @@ flowchart LR
   card --- ch
 ```
 
-- **Live status card:** one message that the serving primary edits in place, showing the serving node, Forgejo version and health, replication state and lag, fence decision, last and next backup, and disk use. The accent turns amber or red when something is off. Edits don't notify anyone, so failures also post a separate alert.
+- **Live status card:** one message that the serving primary edits in place, showing the serving node, Forgejo version and health, replication state and lag, fence decision, last and next backup, and disk use. Optional lines: **Watchdog** (set `watchdog_url` to the watchdog's status page) and **Runners** (put a `read:admin` Forgejo token in `notify.env` as `FORGEJO_STATUS_TOKEN`). The accent turns amber or red when something is off. Edits don't notify anyone, so failures also post a separate alert.
+- **Watching the watchdog:** Uptime Kuma can't report its own outage, so the status card job on the serving primary checks `watchdog_url` and posts one alert card when it becomes unreachable (Kuma alerts are silent) and one when it recovers.
   - **Create it once:** `stack/status-card.sh --create` prints the message id. Put it in `/etc/vps-git-backup/notify.env` as `STATUS_MESSAGE_ID` on both nodes, and pin the message.
   - **Refresh:** `vps-git-status.timer` (every 15 min, enabled with `status_card_enabled`), plus every backup run and fence change.
 - **Alerts** (new messages, so they notify): a backup failure (step, exit code, last error), and a fence decision change (for example a node fencing itself after a failover).
@@ -430,6 +431,7 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 | `github_oauth_client_id` / `github_oauth_client_secret` | GitHub OAuth app for "Sign in with GitHub" |
 | `offsite_backup_enabled` | Install the nightly restic backup timer (default: false); see [Offsite backups](#offsite-backups) |
 | `status_card_enabled` | Install the 15-minute live status card timer (default: false); see [Notifications](#notifications) |
+| `watchdog_url` | Watchdog status page the status card checks; one alert when unreachable, one on recovery (empty: skip) |
 
 Run-time options: `-e init_standby_pg=true` (deploy or demote: rebuild the replica from the peer), `-e promote_target=<host>` (promote a node other than the `standby` group, for failback), and `-e allow_dual_primary=true` (override the deploy guard; don't).
 
