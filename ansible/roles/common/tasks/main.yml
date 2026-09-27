@@ -1,11 +1,11 @@
 ---
 - name: Update apt cache
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     cache_valid_time: 3600
 
 - name: Install base packages
-  apt:
+  ansible.builtin.apt:
     name:
       - curl
       - rsync
@@ -15,7 +15,7 @@
     state: present
 
 - name: Check if Docker is installed
-  command: docker --version
+  ansible.builtin.command: docker --version
   register: docker_check
   ignore_errors: true
   changed_when: false
@@ -24,7 +24,7 @@
   when: docker_check.rc != 0
   block:
     - name: Add Docker GPG key
-      shell: |
+      ansible.builtin.shell: |
         install -m 0755 -d /etc/apt/keyrings
         curl -fsSL https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg \
           -o /etc/apt/keyrings/docker.asc
@@ -33,7 +33,7 @@
         creates: /etc/apt/keyrings/docker.asc
 
     - name: Add Docker apt repository
-      shell: |
+      ansible.builtin.shell: |
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
         https://download.docker.com/linux/{{ ansible_distribution | lower }} \
         $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
@@ -42,11 +42,11 @@
         creates: /etc/apt/sources.list.d/docker.list
 
     - name: Update apt after adding Docker repo
-      apt:
-        update_cache: yes
+      ansible.builtin.apt:
+        update_cache: true
 
     - name: Install Docker packages
-      apt:
+      ansible.builtin.apt:
         name:
           - docker-ce
           - docker-ce-cli
@@ -55,7 +55,7 @@
         state: present
 
 - name: Ensure Docker is running
-  systemd:
+  ansible.builtin.systemd:
     name: docker
     state: started
     enabled: true
@@ -63,12 +63,12 @@
 # Postgres binds to the node's tailnet IP. Docker can start before the tailnet
 # interface has its address, so allow binding to an address that isn't up yet.
 - name: Allow binding to the tailnet IP before it is up
-  copy:
+  ansible.builtin.copy:
     dest: /etc/sysctl.d/60-tailscale-bind.conf
     content: "net.ipv4.ip_nonlocal_bind = 1\n"
     mode: "0644"
   register: nonlocal_bind
 
 - name: Apply nonlocal bind sysctl
-  command: sysctl -p /etc/sysctl.d/60-tailscale-bind.conf
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/60-tailscale-bind.conf
   when: nonlocal_bind is changed

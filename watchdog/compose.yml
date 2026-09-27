@@ -9,16 +9,20 @@ name: git-watchdog
 services:
 
   kuma:
-    image: louislam/uptime-kuma:1
+    image: louislam/uptime-kuma:2
     container_name: vps-git-kuma
     restart: unless-stopped
+    environment:
+      # Kuma 2 asks for a database on first start; SQLite keeps it self-contained.
+      # An existing 1.x kuma.db is migrated in place on first start.
+      UPTIME_KUMA_DB_TYPE: sqlite
     volumes:
       - kuma_data:/app/data
     ports:
       - "127.0.0.1:3001:3001"
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.9.3
     container_name: vps-git-status-tunnel
     restart: unless-stopped
     depends_on:

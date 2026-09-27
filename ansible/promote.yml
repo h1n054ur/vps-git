@@ -19,7 +19,7 @@
   gather_facts: false
   tasks:
     - name: Stop Forgejo, cloudflared and backup on the other node
-      shell: >
+      ansible.builtin.shell: >
         cd {{ vps_git_dir }}/stack &&
         docker compose --env-file .env stop forgejo cloudflared backup
       ignore_errors: true
@@ -30,26 +30,26 @@
   become: true
   tasks:
     - name: Stop standby stack
-      shell: >
+      ansible.builtin.shell: >
         cd {{ vps_git_dir }}/stack &&
         COMPOSE_PROFILES=standby
         docker compose --env-file .env down
       ignore_errors: true
 
     - name: Check Postgres volume exists
-      shell: docker volume inspect stack_postgres_data
+      ansible.builtin.shell: docker volume inspect stack_postgres_data
       register: pg_vol
       ignore_errors: true
 
     - name: Remove standby.signal to promote Postgres
-      shell: |
+      ansible.builtin.shell: |
         PG_PATH=$(docker volume inspect stack_postgres_data -f '{{ '{{' }}.Mountpoint{{ '}}' }}')
         rm -f "$PG_PATH/standby.signal"
         echo "Removed standby.signal from $PG_PATH"
       when: pg_vol.rc == 0
 
     - name: Restore Forgejo data from backup sync
-      shell: |
+      ansible.builtin.shell: |
         SYNC_DIR="{{ vps_git_dir }}/backups/forgejo"
         if [ -d "$SYNC_DIR" ] && [ "$(ls -A "$SYNC_DIR" 2>/dev/null)" ]; then
           FG_PATH=$(docker volume inspect stack_forgejo_data -f '{{ '{{' }}.Mountpoint{{ '}}' }}' 2>/dev/null || echo "")
@@ -65,27 +65,27 @@
       register: forgejo_restore
 
     - name: Display Forgejo restore result
-      debug:
+      ansible.builtin.debug:
         msg: "{{ forgejo_restore.stdout }}"
 
     - name: Switch .env to primary mode
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: "{{ vps_git_dir }}/stack/.env"
         regexp: "{{ item.re }}"
         line: "{{ item.line }}"
       loop:
-        - { re: '^ROLE=', line: 'ROLE=primary' }
-        - { re: '^COMPOSE_PROFILES=', line: 'COMPOSE_PROFILES=primary' }
+        - { re: "^ROLE=", line: "ROLE=primary" }
+        - { re: "^COMPOSE_PROFILES=", line: "COMPOSE_PROFILES=primary" }
 
     - name: Start primary stack
-      shell: >
+      ansible.builtin.shell: >
         cd {{ vps_git_dir }}/stack &&
         COMPOSE_PROFILES=primary
         docker compose --env-file .env up -d
       register: stack_up
 
     - name: Wait for Forgejo to be healthy
-      uri:
+      ansible.builtin.uri:
         url: "http://127.0.0.1:3000/api/healthz"
         method: GET
         status_code: 200
@@ -95,7 +95,7 @@
       until: health.status == 200
 
     - name: Failover complete
-      debug:
+      ansible.builtin.debug:
         msg: >-
           Failover complete. This node is now the primary.
           Forgejo is healthy at http://127.0.0.1:3000.

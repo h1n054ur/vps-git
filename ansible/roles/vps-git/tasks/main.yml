@@ -1,29 +1,29 @@
 ---
 - name: Determine node role
-  set_fact:
+  ansible.builtin.set_fact:
     node_role: "{{ 'primary' if inventory_hostname in groups.get('primary', []) else 'standby' }}"
 
 - name: Create vps-git directory
-  file:
+  ansible.builtin.file:
     path: "{{ vps_git_dir }}"
     state: directory
     mode: "0755"
 
 - name: Clone / update vps-git repo
-  git:
+  ansible.builtin.git:
     repo: "{{ vps_git_repo }}"
     dest: "{{ vps_git_dir }}"
     version: main
-    force: yes
+    force: true
 
 - name: Create cloudflared directory
-  file:
+  ansible.builtin.file:
     path: "{{ vps_git_dir }}/cloudflared"
     state: directory
     mode: "0755"
 
 - name: Create backup receive directories (standby)
-  file:
+  ansible.builtin.file:
     path: "{{ vps_git_dir }}/backups/{{ item }}"
     state: directory
     mode: "0755"
@@ -32,38 +32,38 @@
   when: node_role == "standby"
 
 - name: Template .env file
-  template:
+  ansible.builtin.template:
     src: env.j2
     dest: "{{ vps_git_dir }}/stack/.env"
     mode: "0600"
 
 - name: Template cloudflared config
-  template:
+  ansible.builtin.template:
     src: cloudflared-config.j2
     dest: "{{ vps_git_dir }}/cloudflared/config.yml"
     mode: "0644"
 
 - name: Copy tunnel credentials
-  copy:
+  ansible.builtin.copy:
     src: "{{ tunnel_credentials_file }}"
     dest: "{{ vps_git_dir }}/cloudflared/{{ tunnel_credentials_file | basename }}"
     mode: "0644"
   when: tunnel_credentials_file | length > 0
 
 - name: Copy origin cert (cert.pem)
-  copy:
+  ansible.builtin.copy:
     src: "{{ tunnel_cert_file | default('~/.cloudflared/cert.pem') }}"
     dest: "{{ vps_git_dir }}/cloudflared/cert.pem"
     mode: "0644"
 
 - name: Build backup container image
-  shell: docker build -t vps-git-backup "{{ vps_git_dir }}/stack/backup"
+  ansible.builtin.shell: docker build -t vps-git-backup "{{ vps_git_dir }}/stack/backup"
   changed_when: true
 
 # Split-brain guards: two nodes serving Forgejo behind the same tunnel means
 # writes land on whichever node Cloudflare picks.
 - name: Check whether the standby is running Forgejo
-  shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
+  ansible.builtin.shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
   delegate_to: "{{ item }}"
   loop: "{{ groups.get('standby', []) }}"
   register: standby_forgejo
@@ -72,7 +72,7 @@
   when: node_role == "primary" and not (allow_dual_primary | default(false) | bool)
 
 - name: Refuse to start a second primary
-  fail:
+  ansible.builtin.fail:
     msg: >-
       Forgejo is running on the standby ({{ groups['standby'] | join(', ') }}), so it is serving as
       primary. Run demote.yml against it (or swap the inventory groups) before deploying this node
@@ -82,26 +82,26 @@
     (standby_forgejo.results | default([]) | selectattr('stdout', 'defined') | map(attribute='stdout') | select | list | length > 0)
 
 - name: Check whether this standby is serving as primary
-  shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
+  ansible.builtin.shell: docker ps --filter name=^vps-git-forgejo$ --filter status=running -q
   register: local_forgejo
   changed_when: false
   when: node_role == "standby"
 
 - name: Refuse to reinitialise a node that is serving as primary
-  fail:
+  ansible.builtin.fail:
     msg: >-
       Forgejo is running on this node, so it is serving as primary (for example after promote.yml).
       Re-initialising it as a standby would wipe its database. Demote it or update the inventory first.
   when: node_role == "standby" and local_forgejo.stdout | default('') | length > 0
 
 - name: Stop existing stack
-  shell: >
+  ansible.builtin.shell: >
     cd {{ vps_git_dir }}/stack &&
     docker compose --env-file .env --profile primary --profile standby down 2>/dev/null || true
   changed_when: true
 
 - name: Initialize standby Postgres (pg_basebackup)
-  shell: |
+  ansible.builtin.shell: |
     docker volume rm stack_postgres_data 2>/dev/null || true
     docker volume create stack_postgres_data
     docker run --rm --network host \
@@ -112,19 +112,19 @@
   when: node_role == "standby" and init_standby_pg | default(false) | bool
 
 - name: Start stack (primary)
-  shell: >
+  ansible.builtin.shell: >
     cd {{ vps_git_dir }}/stack &&
     COMPOSE_PROFILES=primary docker compose --env-file .env up -d --build
   when: node_role == "primary"
 
 - name: Start stack (standby)
-  shell: >
+  ansible.builtin.shell: >
     cd {{ vps_git_dir }}/stack &&
     COMPOSE_PROFILES=standby docker compose --env-file .env up -d --build
   when: node_role == "standby"
 
 - name: Install split-brain fence units
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
     mode: "0644"
@@ -134,7 +134,7 @@
   register: fence_units
 
 - name: Enable split-brain fence timer
-  systemd:
+  ansible.builtin.systemd:
     name: vps-git-fence.timer
     enabled: true
     state: started
@@ -142,7 +142,7 @@
 
 # Secrets are created by hand: /etc/vps-git-backup/r2.env and restic-password.
 - name: Install offsite backup units
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
     mode: "0644"
@@ -153,7 +153,7 @@
   when: offsite_backup_enabled | default(false) | bool
 
 - name: Enable offsite backup timer
-  systemd:
+  ansible.builtin.systemd:
     name: vps-git-offsite-backup.timer
     enabled: true
     state: started
@@ -163,7 +163,7 @@
 # Live Discord status card. Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in
 # /etc/vps-git-backup/notify.env (create the card once with status-card.sh --create).
 - name: Install status card units
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
     mode: "0644"
@@ -174,7 +174,7 @@
   when: status_card_enabled | default(false) | bool
 
 - name: Enable status card timer
-  systemd:
+  ansible.builtin.systemd:
     name: vps-git-status.timer
     enabled: true
     state: started
@@ -182,7 +182,7 @@
   when: status_card_enabled | default(false) | bool
 
 - name: Wait for Postgres to be healthy
-  shell: docker exec vps-git-postgres pg_isready -U {{ postgres_user }} -d {{ postgres_db }}
+  ansible.builtin.shell: docker exec vps-git-postgres pg_isready -U {{ postgres_user }} -d {{ postgres_db }}
   register: pg_ready
   retries: 15
   delay: 3
@@ -190,7 +190,7 @@
   changed_when: false
 
 - name: Wait for Forgejo health (primary only)
-  uri:
+  ansible.builtin.uri:
     url: "http://127.0.0.1:3000/api/healthz"
     method: GET
     status_code: 200
@@ -201,7 +201,7 @@
   when: node_role == "primary"
 
 - name: Check if Forgejo install lock is set
-  shell: >
+  ansible.builtin.shell: >
     docker exec vps-git-forgejo
     grep -q 'INSTALL_LOCK.*=.*true' /data/gitea/conf/app.ini && echo "locked" || echo "unlocked"
   register: install_lock
@@ -209,17 +209,17 @@
   when: node_role == "primary"
 
 - name: Set Forgejo install lock
-  shell: >
+  ansible.builtin.shell: >
     docker exec vps-git-forgejo
     sed -i 's/INSTALL_LOCK.*/INSTALL_LOCK = true/' /data/gitea/conf/app.ini
   when: node_role == "primary" and install_lock.stdout | trim == "unlocked"
 
 - name: Restart Forgejo after install lock
-  shell: docker restart vps-git-forgejo
+  ansible.builtin.shell: docker restart vps-git-forgejo
   when: node_role == "primary" and install_lock.stdout | trim == "unlocked"
 
 - name: Wait for Forgejo after restart
-  uri:
+  ansible.builtin.uri:
     url: "http://127.0.0.1:3000/api/healthz"
     method: GET
     status_code: 200
@@ -230,7 +230,7 @@
   when: node_role == "primary" and install_lock.stdout | trim == "unlocked"
 
 - name: Create Forgejo admin user
-  shell: >
+  ansible.builtin.shell: >
     docker exec --user git vps-git-forgejo
     forgejo admin user create
     --admin
@@ -243,13 +243,13 @@
   when: node_role == "primary"
 
 - name: List existing auth sources
-  shell: docker exec --user git vps-git-forgejo forgejo admin auth list
+  ansible.builtin.shell: docker exec --user git vps-git-forgejo forgejo admin auth list
   register: auth_list
   changed_when: false
   when: node_role == "primary"
 
 - name: Register GitHub OAuth provider
-  shell: >
+  ansible.builtin.shell: >
     docker exec --user git vps-git-forgejo
     forgejo admin auth add-oauth
     --name github
@@ -262,11 +262,11 @@
   when: node_role == "primary" and 'github' not in auth_list.stdout
 
 - name: Restart Forgejo after OAuth
-  shell: docker restart vps-git-forgejo
+  ansible.builtin.shell: docker restart vps-git-forgejo
   when: node_role == "primary" and oauth_create is changed
 
 - name: Wait for Forgejo after OAuth
-  uri:
+  ansible.builtin.uri:
     url: "http://127.0.0.1:3000/api/healthz"
     method: GET
     status_code: 200

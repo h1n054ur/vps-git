@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Auto-configure Uptime Kuma after first deploy.
-Creates admin account, adds monitors, and sets up a public status page.
+Creates the admin account, adds the monitors and, optionally, the Discord card
+notification. No public status page is created (see the note at the end).
 
 Uses socketio.Client with sio.call() for proper request/response handling.
-Tested against Uptime Kuma 1.23.x Socket.IO API.
+Tested against the Uptime Kuma 2.x Socket.IO API.
 
 Usage (inside Docker via compose):
   docker compose --env-file .env run --rm setup-kuma \
@@ -210,9 +211,18 @@ def main():
              "active": True, "notificationIDList": []},
         ]
 
+    # Fields Uptime Kuma 2 requires on every monitor (it rejects NULL conditions).
+    kuma2_defaults = {
+        "conditions": "[]",
+        "kafkaProducerBrokers": [],
+        "kafkaProducerSaslOptions": {},
+        "rabbitmqNodes": [],
+    }
     created = 0
     skipped = 0
+    failed = 0
     for mon in monitor_defs:
+        mon = {**kuma2_defaults, **mon}
         if mon["name"] in existing_names:
             print(f"  SKIP: {mon['name']} (already exists)")
             skipped += 1
@@ -226,8 +236,10 @@ def main():
                 created += 1
             else:
                 print(f" FAIL: {resp.get('msg', 'unknown')}")
+                failed += 1
         except Exception as e:
             print(f" ERROR: {e}")
+            failed += 1
 
     # ── Step 5: Discord notification (optional) ───────────────────────
     # Kuma's own Discord provider only sends basic embeds, so this uses the
@@ -266,8 +278,10 @@ def main():
     # NOTE: No public status page is created. The Kuma dashboard (behind login)
     # shows all monitors. A public status page would leak infrastructure details
     # (Tailscale IPs, internal hostnames, ports).
-    print(f"\nDone. Monitors created: {created}, skipped: {skipped}.")
+    print(f"\nDone. Monitors created: {created}, skipped: {skipped}, failed: {failed}.")
     sio.disconnect()
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

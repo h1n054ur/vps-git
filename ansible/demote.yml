@@ -16,22 +16,22 @@
 
   tasks:
     - name: Stop all containers
-      shell: >
+      ansible.builtin.shell: >
         cd {{ vps_git_dir }}/stack &&
         docker compose --env-file .env --profile primary --profile standby down
       ignore_errors: true
 
     - name: Switch .env to standby mode
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: "{{ vps_git_dir }}/stack/.env"
         regexp: "{{ item.re }}"
         line: "{{ item.line }}"
       loop:
-        - { re: '^ROLE=', line: 'ROLE=standby' }
-        - { re: '^COMPOSE_PROFILES=', line: 'COMPOSE_PROFILES=standby' }
+        - { re: "^ROLE=", line: "ROLE=standby" }
+        - { re: "^COMPOSE_PROFILES=", line: "COMPOSE_PROFILES=standby" }
 
     - name: Re-initialize Postgres as streaming replica
-      shell: |
+      ansible.builtin.shell: |
         docker volume rm stack_postgres_data 2>/dev/null || true
         docker volume create stack_postgres_data
         docker run --rm --network host \
@@ -42,11 +42,11 @@
       when: init_standby_pg | bool
 
     - name: Start standby stack
-      shell: >
+      ansible.builtin.shell: >
         cd {{ vps_git_dir }}/stack &&
         COMPOSE_PROFILES=standby
         docker compose --env-file .env up -d
 
     - name: Node demoted
-      debug:
+      ansible.builtin.debug:
         msg: "This node is now a standby. Postgres is replicating from the current primary."

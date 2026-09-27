@@ -77,7 +77,7 @@ services:
       start_period: 30s
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.9.3
     container_name: vps-git-cloudflared
     # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
     restart: "no"

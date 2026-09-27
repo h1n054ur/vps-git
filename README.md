@@ -271,6 +271,17 @@ docker start vps-git-failover
 
 The standby's Postgres is a physical replica, so it follows the schema migrations on its own.
 
+### Pinned versions
+
+| Component | Version | Notes |
+|---|---|---|
+| Forgejo | `codeberg.org/forgejo/forgejo:16` | Set with `forge_image` / `FORGE_IMAGE`. See [Upgrading Forgejo](#upgrading-forgejo). |
+| Postgres | `postgres:16-alpine` | Supported upstream until November 2028. A major upgrade (17 or 18) needs a new cluster: dump and restore on the primary during a maintenance window, then re-initialise the standby with `demote.yml -e init_standby_pg=true`. Never mix majors between primary and standby. |
+| cloudflared | `cloudflare/cloudflared:2026.9.3` | Pinned instead of `latest` so a restart never pulls an unreviewed version. |
+| Uptime Kuma | `louislam/uptime-kuma:2` | Kuma 1 is superseded. An existing Kuma 1 data directory is migrated automatically on first start of Kuma 2; back up `kuma-data/` first. `setup-kuma` targets Kuma 2 (monitors need its `conditions` field). |
+| Base images | `python:3.14-alpine`, `alpine:3.24` | Failover agent, setup-kuma and the backup sidecar. |
+| restic | 0.19.1 | Installed on the hosts from the official release, see [Offsite backups](#offsite-backups). |
+
 ### Offsite backups
 
 Replication and the backup sidecar protect against losing a node, not against mistakes: a deleted repo or a bad migration reaches the standby within seconds. `stack/offsite-backup.sh` adds encrypted, versioned backups to an S3-compatible bucket with [restic](https://restic.net/). Cloudflare R2 is what this is tested with (free egress, and a few hundred MB fits the free tier).
