@@ -4,6 +4,9 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
 
 > **Where development happens:** the primary copy of this repo lives on the author's own Forgejo instance (running this very stack), and this GitHub repo is a push mirror that updates on every commit. Cloning, stars, issues and pull requests here on GitHub are all fine; accepted changes are applied upstream and mirrored back.
 
+
+Current release: **v2.0.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed, including breaking changes and migration notes from v1.
+
 ## Architecture
 
 ```mermaid
@@ -451,6 +454,7 @@ Run-time options: `-e init_standby_pg=true` (deploy or demote: rebuild the repli
 
 ```
 vps-git/
+  CHANGELOG.md                Release notes
   stack/
     compose.yml               Docker Compose (profiles: primary, standby)
     fence.sh                  Split-brain fence, run by vps-git-fence.timer
