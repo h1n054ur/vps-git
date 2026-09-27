@@ -22,6 +22,10 @@
 # DRY_RUN=1 prints the decision and the planned commands without calling restic
 # or posting. VPS_GIT_SECRETS points at a different secrets dir (for testing).
 set -euo pipefail
+# systemd runs this without HOME; restic needs a cache directory.
+export HOME="${HOME:-/root}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/var/cache/vps-git-restic}"
+mkdir -p "$XDG_CACHE_HOME"
 cd "$(dirname "$0")"
 set -a; . ./.env; set +a
 . ./notify.sh

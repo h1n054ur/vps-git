@@ -7,4 +7,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
+# restic needs a home or cache dir; systemd services have neither by default.
+Environment=HOME=/root
+Environment=XDG_CACHE_HOME=/var/cache/vps-git-restic
 ExecStart={{ vps_git_dir }}/stack/offsite-backup.sh
