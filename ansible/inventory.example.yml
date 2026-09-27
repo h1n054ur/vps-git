@@ -127,3 +127,6 @@ all:
           # Optional: Discord webhook URL for Uptime Kuma alerts (a default
           # notification attached to every monitor). Leave empty to skip.
           watchdog_discord_webhook: ""
+          # Other machines to watch from Kuma: a ping and an SSH monitor each
+          watchdog_extra_hosts: []
+          #   - {name: build-box, host: 100.z.z.z}

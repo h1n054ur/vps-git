@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--discord-webhook", default="", help="Optional Discord webhook URL; creates a default notification attached to every monitor")
     parser.add_argument("--discord-name", default="Discord #forgejo", help="Name of the Discord notification in Kuma")
     parser.add_argument("--test-notification", action="store_true", help="Send a test message through the Discord notification")
+    parser.add_argument("--extra-host", action="append", default=[], metavar="NAME=HOST",
+                        help="Also monitor another machine (repeatable): adds '<NAME> - Ping' and '<NAME> - SSH'")
     args = parser.parse_args()
 
     print(f"Connecting to Uptime Kuma at {args.url}...")
@@ -194,6 +196,19 @@ def main():
             "notificationIDList": [],
         },
     ]
+    for spec in args.extra_host:
+        name, _, host = spec.partition("=")
+        if not name or not host:
+            print(f"  SKIP: bad --extra-host {spec!r} (want NAME=HOST)")
+            continue
+        monitor_defs += [
+            {"name": f"{name} - Ping", "type": "ping", "hostname": host, "interval": 60,
+             "retryInterval": 60, "maxretries": 3, "accepted_statuscodes": ["200-299"],
+             "active": True, "notificationIDList": []},
+            {"name": f"{name} - SSH", "type": "port", "hostname": host, "port": 22, "interval": 60,
+             "retryInterval": 60, "maxretries": 3, "accepted_statuscodes": ["200-299"],
+             "active": True, "notificationIDList": []},
+        ]
 
     created = 0
     skipped = 0

@@ -426,6 +426,7 @@ All configuration lives in `ansible/inventory.yml` (gitignored). Key variables:
 | `watchdog_check_interval` | Seconds between health checks (default: 30) |
 | `watchdog_fail_threshold` | Consecutive failures before failover (default: 3) |
 | `watchdog_discord_webhook` | Discord webhook for Uptime Kuma alert cards (empty: skip) |
+| `watchdog_extra_hosts` | Extra machines for Kuma to watch, each `{name, host}`: adds a ping and an SSH monitor (`setup-kuma --extra-host`) |
 | `forge_image` | Forgejo image (default `codeberg.org/forgejo/forgejo:16`); see [Upgrading Forgejo](#upgrading-forgejo) |
 | `mail_from` / `cf_api_token` | Sender address and Cloudflare Email Sending token for Forgejo mail (SMTP) |
 | `github_oauth_client_id` / `github_oauth_client_secret` | GitHub OAuth app for "Sign in with GitHub" |

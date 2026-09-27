@@ -183,6 +183,7 @@
     --primary-host "{{ primary_tailnet_ip }}"
     --standby-host "{{ standby_tailnet_ip }}"
     {% if watchdog_discord_webhook | default('') | length > 0 %}--discord-webhook "{{ watchdog_discord_webhook }}"{% endif %}
+    {% for h in watchdog_extra_hosts | default([]) %}--extra-host "{{ h.name }}={{ h.host }}" {% endfor %}
   args:
     chdir: "{{ watchdog_dir }}"
   no_log: "{{ watchdog_discord_webhook | default('') | length > 0 }}"
