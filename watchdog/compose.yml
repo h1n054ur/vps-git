@@ -42,6 +42,9 @@ services:
       PRIMARY_HEALTH_URL: ${PRIMARY_HEALTH_URL}
       CHECK_INTERVAL: ${CHECK_INTERVAL:-30}
       FAIL_THRESHOLD: ${FAIL_THRESHOLD:-3}
+      COOLDOWN_SEC: ${COOLDOWN_SEC:-3600}
+      # Optional: a Discord webhook for failover alerts (promote started, failed, done).
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       ANSIBLE_PLAYBOOK: /ansible/promote.yml
       ANSIBLE_INVENTORY: /ansible/inventory.yml
     volumes:

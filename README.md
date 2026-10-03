@@ -173,7 +173,12 @@ The watchdog checks the primary's health endpoint every 30 seconds. After 3 cons
 
 If the old primary comes back later, its fence sees a primary on a newer timeline and keeps Forgejo stopped. See [Failback](#failback) to make it the primary again.
 
-A 1-hour cooldown prevents repeated failovers.
+Two guards keep the agent from making things worse:
+
+- **It only counts a failure when it is online itself.** Before counting a failed health check it tries two outside endpoints (`INTERNET_CHECK_URLS`, default Cloudflare and Google); if neither answers, the watchdog's own link is down and the round is skipped. A watchdog that loses its uplink never fails over a healthy primary.
+- **A 1-hour cooldown (`COOLDOWN_SEC`) starts with every promote attempt**, successful or not. A failed `promote.yml` is not retried in a loop (each run fences the primary again); it raises an alert instead.
+
+Set `DISCORD_WEBHOOK_URL` in the watchdog's `.env` to get an alert when a promote starts, fails or completes.
 
 ### Manual
 
