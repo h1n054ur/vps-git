@@ -117,7 +117,7 @@ cd ansible
 ansible-playbook watchdog.yml
 ```
 
-This deploys the full watchdog stack, creates an Uptime Kuma admin account, and auto-configures all monitors (Forgejo health, web, Postgres and SSH on both nodes). The dashboard is login-protected to avoid leaking infrastructure details.
+This deploys the full watchdog stack, creates an Uptime Kuma admin account, and auto-configures all monitors (Forgejo health, web, Postgres and SSH on both nodes). The dashboard is login-protected to avoid leaking infrastructure details, and the tunnel does not publish it: only `/` and the paths a Kuma status page needs pass through, everything else gets 404. Open the dashboard over a private network (an SSH tunnel to `127.0.0.1:3001` or a private reverse proxy).
 
 **Option B: Manual**
 
@@ -141,7 +141,7 @@ docker compose --env-file .env run --rm setup-kuma \
 The stack includes:
 - **Uptime Kuma:** monitoring dashboard (login-protected, no public status page)
 - **Failover agent:** health-checks the primary, auto-runs `promote.yml` after consecutive failures
-- **cloudflared:** tunnels the dashboard to your status domain
+- **cloudflared:** tunnels `/` and the status page paths to your status domain (the dashboard, login and socket.io answer 404 there)
 - **setup-kuma:** one-shot container that creates the admin account and all monitors, and (with `--discord-webhook`) the Discord alert notification
 
 ### 5. Verify

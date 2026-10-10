@@ -1,7 +1,12 @@
 tunnel: {{ watchdog_tunnel_uuid }}
 credentials-file: /etc/cloudflared/{{ watchdog_tunnel_uuid }}.json
 
+# Only the root redirect and the pieces a Kuma status page loads are public. The dashboard,
+# login, setup and socket.io answer 404 here: reach them over a private network instead
+# (an SSH tunnel to 127.0.0.1:3001 or a private reverse proxy). "/" stays open because the
+# status card on the primary checks it (a 302 means Kuma is up).
 ingress:
   - hostname: {{ watchdog_status_hostname }}
+    path: ^/($|status/|api/status-page/|assets/|upload/|icon[^/]*$|favicon\.ico$)
     service: http://vps-git-kuma:3001
   - service: http_status:404
