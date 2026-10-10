@@ -1,9 +1,4 @@
 PRIMARY_HEALTH_URL={{ app_url }}/api/healthz
-SSH_KEY_PRIMARY={{ watchdog_ssh_key_primary }}
-SSH_KEY_STANDBY={{ watchdog_ssh_key_standby }}
-CHECK_INTERVAL={{ watchdog_check_interval | default(30) }}
-FAIL_THRESHOLD={{ watchdog_fail_threshold | default(3) }}
 KUMA_USERNAME={{ kuma_username | default('admin') }}
 KUMA_PASSWORD={{ kuma_password }}
 PRIMARY_TAILNET_IP={{ primary_tailnet_ip }}
-STANDBY_TAILNET_IP={{ standby_tailnet_ip }}

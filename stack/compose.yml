@@ -1,7 +1,8 @@
-# vps-git service stack
+# vps-git service stack: one Forgejo instance (no standby since 2026-10-10).
 #
-# Primary:  COMPOSE_PROFILES=primary docker compose --env-file .env up -d
-# Standby:  COMPOSE_PROFILES=standby docker compose --env-file .env up -d
+#   docker compose --env-file .env up -d
+#
+# Backups run outside this stack (a nightly restic job on the host).
 
 services:
 
@@ -9,16 +10,12 @@ services:
     image: postgres:16-alpine
     container_name: vps-git-postgres
     restart: unless-stopped
-    profiles: ["primary", "standby"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      REPL_USER: ${REPL_USER}
-      REPL_PASSWORD: ${REPL_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
     ports:
       - "${PG_BIND:-127.0.0.1}:5432:5432"
     healthcheck:
@@ -27,20 +24,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    command: >-
-      postgres
-      -c wal_level=replica
-      -c max_wal_senders=5
-      -c wal_keep_size=256MB
-      -c hot_standby=on
-      -c listen_addresses='*'
 
   forgejo:
     image: ${FORGE_IMAGE:-codeberg.org/forgejo/forgejo:16}
     container_name: vps-git-forgejo
-    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
-    restart: "no"
-    profiles: ["primary"]
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,9 +67,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2026.9.3
     container_name: vps-git-cloudflared
-    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
-    restart: "no"
-    profiles: ["primary"]
+    restart: unless-stopped
     depends_on:
       forgejo:
         condition: service_healthy
@@ -92,29 +78,6 @@ services:
     volumes:
       - ../cloudflared:/etc/cloudflared:ro
 
-  backup:
-    build: ./backup
-    container_name: vps-git-backup
-    # Started by fence.sh (vps-git-fence.timer), never automatically at boot.
-    restart: "no"
-    profiles: ["primary"]
-    network_mode: host
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGHOST: ${PG_BIND:-127.0.0.1}
-      PGUSER: ${POSTGRES_USER}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      PGDATABASE: ${POSTGRES_DB}
-      PEER_HOST: ${PEER_HOST}
-      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-900}
-    volumes:
-      - forgejo_data:/data/forgejo:ro
-      - backup_data:/backups
-      - ${BACKUP_SSH_KEY:-/dev/null}:/root/.ssh/id_key:ro
-
 volumes:
   postgres_data:
   forgejo_data:
-  backup_data:

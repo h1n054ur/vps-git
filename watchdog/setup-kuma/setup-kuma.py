@@ -14,7 +14,6 @@ Usage (inside Docker via compose):
     --password 'YourPassword' \
     --health-url https://git.example.com/api/healthz \
     --primary-host 100.x.x.x \
-    --standby-host 100.y.y.y \
     --discord-webhook https://discord.com/api/webhooks/...   # optional
 """
 
@@ -52,7 +51,6 @@ def main():
     parser.add_argument("--password", required=True, help="Admin password")
     parser.add_argument("--health-url", required=True, help="Forgejo health endpoint URL")
     parser.add_argument("--primary-host", required=True, help="Primary VPS IP (Tailscale/private)")
-    parser.add_argument("--standby-host", required=True, help="Standby VPS IP (Tailscale/private)")
     parser.add_argument("--discord-webhook", default="", help="Optional Discord webhook URL; creates a default notification attached to every monitor")
     parser.add_argument("--discord-name", default="Discord #forgejo", help="Name of the Discord notification in Kuma")
     parser.add_argument("--test-notification", action="store_true", help="Send a test message through the Discord notification")
@@ -164,30 +162,6 @@ def main():
             "name": "Primary - SSH",
             "type": "port",
             "hostname": args.primary_host,
-            "port": 22,
-            "interval": 60,
-            "retryInterval": 60,
-            "maxretries": 3,
-            "accepted_statuscodes": ["200-299"],
-            "active": True,
-            "notificationIDList": [],
-        },
-        {
-            "name": "Standby - Postgres",
-            "type": "port",
-            "hostname": args.standby_host,
-            "port": 5432,
-            "interval": 30,
-            "retryInterval": 30,
-            "maxretries": 3,
-            "accepted_statuscodes": ["200-299"],
-            "active": True,
-            "notificationIDList": [],
-        },
-        {
-            "name": "Standby - SSH",
-            "type": "port",
-            "hostname": args.standby_host,
             "port": 22,
             "interval": 60,
             "retryInterval": 60,

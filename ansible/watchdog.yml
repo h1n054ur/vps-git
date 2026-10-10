@@ -1,5 +1,5 @@
 ---
-# Deploy the watchdog stack (Uptime Kuma + failover + cloudflared).
+# Deploy the watchdog stack (Uptime Kuma + cloudflared).
 #
 # The watchdog can run on localhost or a remote 3rd VPS.
 # Set the target in your inventory under the "watchdog" group.

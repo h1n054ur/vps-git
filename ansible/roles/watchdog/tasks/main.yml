@@ -1,16 +1,14 @@
 ---
-# Deploy the watchdog stack (Uptime Kuma + failover agent + cloudflared).
+# Deploy the watchdog stack (Uptime Kuma + cloudflared).
 # Works on both localhost and a remote 3rd VPS.
 #
 # Required vars:
 #   watchdog_dir              - where the watchdog stack lives (e.g. /opt/vps-git/watchdog)
-#   watchdog_ssh_key_primary  - SSH private key path that can reach primary VPS
-#   watchdog_ssh_key_standby  - SSH private key path that can reach standby VPS
 #   watchdog_tunnel_uuid      - Cloudflare tunnel UUID for status page
 #   watchdog_tunnel_credentials_file - path to tunnel credentials JSON
 #   watchdog_status_hostname  - hostname for Uptime Kuma (e.g. status-git.example.com)
 #   kuma_username / kuma_password - Uptime Kuma admin credentials
-#   primary_tailnet_ip / standby_tailnet_ip - Tailscale IPs for monitors
+#   primary_tailnet_ip        - Tailscale IP of the Forgejo VPS for monitors
 #   watchdog_discord_webhook  - optional Discord webhook URL; adds a default notification to every monitor
 #   app_url                   - Forgejo public URL (for health check)
 
@@ -122,19 +120,6 @@
     dest: "{{ watchdog_dir }}/cloudflared/{{ watchdog_tunnel_uuid }}.json"
     mode: "0644"
 
-- name: Copy tunnel origin cert (cert.pem)
-  ansible.builtin.copy:
-    src: "{{ watchdog_tunnel_cert_file | default('~/.cloudflared/cert.pem') }}"
-    dest: "{{ watchdog_dir }}/cloudflared/cert.pem"
-    mode: "0644"
-
-- name: Copy Ansible inventory for failover agent
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/inventory.yml"
-    dest: "{{ watchdog_repo_dir }}/ansible/inventory.yml"
-    mode: "0600"
-  when: not watchdog_is_local | bool
-
 - name: Stop existing watchdog stack
   ansible.builtin.shell: >
     docker compose --env-file .env down 2>/dev/null || true
@@ -181,7 +166,6 @@
     --password "{{ kuma_password }}"
     --health-url "{{ app_url }}/api/healthz"
     --primary-host "{{ primary_tailnet_ip }}"
-    --standby-host "{{ standby_tailnet_ip }}"
     {% if watchdog_discord_webhook | default('') | length > 0 %}--discord-webhook "{{ watchdog_discord_webhook }}"{% endif %}
     {% for h in watchdog_extra_hosts | default([]) %}--extra-host "{{ h.name }}={{ h.host }}" {% endfor %}
   args:
@@ -198,4 +182,3 @@
     msg: >-
       Watchdog stack is running.
       Uptime Kuma: http://127.0.0.1:3001 (or https://{{ watchdog_status_hostname }})
-      Failover agent: monitoring {{ app_url }}/api/healthz every {{ watchdog_check_interval | default(30) }}s

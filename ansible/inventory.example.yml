@@ -4,17 +4,15 @@
 
 all:
   vars:
-    # Where vps-git lives on each node
+    # Where vps-git lives on the node
     vps_git_dir: /opt/vps-git
     # Git repo to clone
     vps_git_repo: https://github.com/youruser/vps-git.git
 
-    # Shared secrets (same on both nodes)
+    # Database
     postgres_db: forgejo
     postgres_user: forgejo
     postgres_password: "CHANGEME"
-    repl_user: replicator
-    repl_password: "CHANGEME"
 
     # App config
     app_name: vps-git
@@ -31,26 +29,13 @@ all:
     forgejo_require_signin: true          # must log in to see anything
     forgejo_default_private: "private"    # new repos are private by default (private/public)
 
-    # Backup -- how often (in seconds) the sidecar runs pg_dump + rsync to standby.
-    # This is the max data loss window for git repo files on disk.
-    # Database replicates in real-time regardless of this value.
-    #   60  = every minute  (recommended for active repos)
-    #   300 = every 5 min
-    #   900 = every 15 min  (lighter on resources)
-    backup_interval: 60
-
-    # Offsite backups (restic to R2 or any S3-compatible store), nightly from the
-    # serving primary only. Needs /etc/vps-git-backup/r2.env and restic-password
-    # on each node, created by hand (see README "Offsite backups").
-    offsite_backup_enabled: false
-
-    # Live Discord status card edited every 15 minutes by the serving primary.
-    # Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in /etc/vps-git-backup/notify.env
+    # Live Discord status card edited every 15 minutes. Backups run outside this
+    # repo (a nightly restic job on the host), the card reads their results.
+    # Needs DISCORD_WEBHOOK_URL and STATUS_MESSAGE_ID in /etc/forgejo-backup/notify.env
     # (see README "Notifications"; create the card once with stack/status-card.sh --create).
     status_card_enabled: false
-    # Watchdog status page checked by the status card (empty = skip), e.g. "https://status-git.example.com"
+    # Watchdog Uptime Kuma URL checked by the status card (empty = skip)
     watchdog_url: ""
-    backup_ssh_key: /root/.ssh/id_ed25519
 
     # Cloudflare tunnel
     tunnel_name: vps-git
@@ -78,19 +63,9 @@ all:
           ansible_host: 203.0.113.10        # public or Tailscale IP
           ansible_user: root
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          peer_host: 100.y.y.y              # standby's Tailscale IP
           pg_bind: "100.x.x.x"               # this node's Tailscale IP
 
-    standby:
-      hosts:
-        standby-vps:
-          ansible_host: 198.51.100.20       # public or Tailscale IP
-          ansible_user: root
-          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          peer_host: 100.x.x.x              # primary's Tailscale IP
-          pg_bind: "100.x.x.x"               # this node's Tailscale IP
-
-    # Watchdog -- Uptime Kuma + failover agent + cloudflared tunnel.
+    # Watchdog -- Uptime Kuma + cloudflared tunnel.
     # Use localhost for local deployment, or a remote host for a 3rd VPS.
     watchdog:
       hosts:
@@ -99,30 +74,20 @@ all:
 
           # Path to the watchdog/ directory (local checkout)
           watchdog_dir: /path/to/vps-git/watchdog
-          # Path to the repo root (for failover agent's Ansible access)
+          # Path to the repo root
           watchdog_repo_dir: /path/to/vps-git
-
-          # SSH keys the failover agent uses to reach VPS nodes
-          watchdog_ssh_key_primary: /path/to/primary_ssh_key
-          watchdog_ssh_key_standby: /path/to/standby_ssh_key
 
           # Cloudflare tunnel for Uptime Kuma status page
           watchdog_tunnel_uuid: "your-status-tunnel-uuid"
           watchdog_tunnel_credentials_file: /path/to/tunnel-uuid.json
-          watchdog_tunnel_cert_file: ~/.cloudflared/cert.pem
           watchdog_status_hostname: "status-git.example.com"
 
           # Uptime Kuma admin (created on first run)
           kuma_username: admin
           kuma_password: "CHANGEME"
 
-          # Tailscale IPs for port monitors
+          # Tailscale IP of the Forgejo VPS for port monitors
           primary_tailnet_ip: 100.x.x.x
-          standby_tailnet_ip: 100.y.y.y
-
-          # Failover tuning
-          watchdog_check_interval: 30
-          watchdog_fail_threshold: 3
 
           # Optional: Discord webhook URL for Uptime Kuma alerts (a default
           # notification attached to every monitor). Leave empty to skip.

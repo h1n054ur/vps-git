@@ -1,7 +1,7 @@
 name: git-watchdog
 
-# Watchdog stack -- monitoring + automatic failover.
-# Runs locally or on any 3rd machine with network access to both VPS nodes.
+# Watchdog stack -- Uptime Kuma monitoring (the automatic failover was removed on
+# 2026-10-10: Forgejo runs as one instance).
 #
 # docker compose --env-file .env up -d
 # docker compose --env-file .env run --rm setup-kuma   # first-time monitor setup
@@ -34,24 +34,6 @@ services:
     volumes:
       - ./cloudflared:/etc/cloudflared:ro
 
-  failover:
-    build: ./failover
-    container_name: vps-git-failover
-    restart: unless-stopped
-    environment:
-      PRIMARY_HEALTH_URL: ${PRIMARY_HEALTH_URL}
-      CHECK_INTERVAL: ${CHECK_INTERVAL:-30}
-      FAIL_THRESHOLD: ${FAIL_THRESHOLD:-3}
-      COOLDOWN_SEC: ${COOLDOWN_SEC:-3600}
-      # Optional: a Discord webhook for failover alerts (promote started, failed, done).
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
-      ANSIBLE_PLAYBOOK: /ansible/promote.yml
-      ANSIBLE_INVENTORY: /ansible/inventory.yml
-    volumes:
-      - ${SSH_KEY_PRIMARY}:/root/.ssh/primary_key:ro
-      - ${SSH_KEY_STANDBY}:/root/.ssh/standby_key:ro
-      - ../ansible:/ansible:ro
-
   setup-kuma:
     build: ./setup-kuma
     container_name: vps-git-setup-kuma
@@ -65,7 +47,6 @@ services:
       KUMA_PASSWORD: ${KUMA_PASSWORD}
       HEALTH_URL: ${PRIMARY_HEALTH_URL}
       PRIMARY_HOST: ${PRIMARY_TAILNET_IP}
-      STANDBY_HOST: ${STANDBY_TAILNET_IP}
 
 volumes:
   kuma_data:

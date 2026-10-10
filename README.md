@@ -5,6 +5,8 @@ Self-hosted [Forgejo](https://forgejo.org/) instance with high availability, str
 > **Where development happens:** the primary copy of this repo lives on the author's own Forgejo instance (running this very stack), and this GitHub repo is a push mirror that updates on every commit. Cloning, stars, issues and pull requests here on GitHub are all fine; accepted changes are applied upstream and mirrored back.
 
 
+> **Single instance since v3.0.0 (unreleased):** the hot standby, streaming replication, automatic failover, split-brain fence and the rsync and offsite backup jobs were removed. The stack now runs one Forgejo with Postgres and cloudflared, backed up nightly by a restic job on the host outside this repo. The Failover, Replication, Offsite backups and standby parts of this README describe v2 and are kept only until this README is rewritten.
+
 Current release: **v2.0.0**. See [CHANGELOG.md](CHANGELOG.md) for what changed, including breaking changes and migration notes from v1.
 
 ## Architecture

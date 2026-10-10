@@ -1,14 +1,11 @@
 ---
-# Deploy the vps-git stack to all nodes.
+# Deploy the vps-git stack (one Forgejo instance).
 #
 # Usage:
-#   ansible-playbook deploy.yml                    # deploy to all
-#   ansible-playbook deploy.yml -l primary         # primary only
-#   ansible-playbook deploy.yml -l standby         # standby only
-#   ansible-playbook deploy.yml -l standby -e init_standby_pg=true  # init replica
+#   ansible-playbook deploy.yml
 
 - name: Deploy vps-git
-  hosts: all
+  hosts: primary
   roles:
     - common
     - vps-git

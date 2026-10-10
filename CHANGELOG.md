@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] - 3.0.0
+
+One Forgejo instance instead of a primary and a hot standby.
+
+### Removed
+- The standby node: streaming replication (`REPL_*`, `PEER_HOST`, `init-replication.sh` and the replication flags on Postgres), `promote.yml` and `demote.yml`.
+- The split-brain fence (`fence.sh`, `vps-git-fence` units). Forgejo and cloudflared now use `restart: unless-stopped` and start with Docker.
+- The backup sidecar (pg_dump plus rsync to the standby) and the offsite backup job (`offsite-backup.sh`, `vps-git-offsite-backup` units, `r2.env.example`). Backups run as a nightly restic job on the host, outside this repo.
+- The watchdog's failover agent (`watchdog/failover/`) and the standby monitors in `setup-kuma`. The watchdog keeps Uptime Kuma and its tunnel.
+- `cert.pem` copies on the nodes and the watchdog: a tunnel only needs its credentials JSON (now mode 640, group 65532 for the cloudflared user).
+
+### Changed
+- The status card shows the single instance, one line per backup destination from `/var/lib/forgejo-backup/last-<dest>.json` and the next run of `forgejo-backup.timer`; the status page button became an optional "Uptime Kuma" button (`STATUS_URL`).
+- `notify.env` moved to `/etc/forgejo-backup/notify.env`.
+
+### Migration
+Applying this compose recreates the Postgres, Forgejo and cloudflared containers once (a short Forgejo restart). Drop the `replicator` role and its `pg_hba.conf` line first, and remove `ROLE`, `COMPOSE_PROFILES`, `REPL_*`, `PEER_HOST`, `BACKUP_INTERVAL` and `BACKUP_SSH_KEY` from `stack/.env`.
+
 ## [2.0.0] - 2026-09-27
 
 Production hardening after running the stack across two regions: a private network switch, a real split-brain fence, offsite backups, alerting, and current dependencies throughout.
