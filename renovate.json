@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Weekly dependency updates: minor and patch grouped, majors on their own, no automerge.",
+  "extends": ["config:recommended", "docker:pinDigests", ":dependencyDashboard"],
+  "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "automerge": false,
+  "dependencyDashboardTitle": "Dependency dashboard (Renovate)",
+  "ignorePaths": ["**/node_modules/**"],
+  "github-actions": {
+    "managerFilePatterns": ["/^\\.(?:forgejo|gitea|github)/workflows/[^/]+\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "One PR for every minor, patch and digest update; majors get their own PRs.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "groupName": "minor and patch updates",
+      "groupSlug": "minor-patch"
+    }
+  ]
+}
